@@ -15,21 +15,21 @@ from config import Config
 logging.getLogger('pyrogram').setLevel(logging.WARNING)
 
 
-@pyrogram.Client.on_message(pyrogram.filters.command(['help']))
+@Client.on_message(filters.command(['help']))
 async def help_user(bot, update):
     if str(update.from_user.id) in Config.ALLOWED_USERS:
         await bot.send_message(
             update.chat.id,
             Chat.HELP_TEXT,
-            parse_mode='html',
+            parse_mode="HTML",  # Fixed parse mode
             disable_web_page_preview=True,
-            reply_to_message_id=update.id  # FIXED
+            reply_to_message_id=update.id  # Fixed message_id
         )
     else:
         await bot.send_message(
             update.chat.id,
             Chat.NO_AUTH_USER,
-            reply_to_message_id=update.id  # FIXED
+            reply_to_message_id=update.id  # Fixed message_id
         )
 
 @pyrogram.Client.on_message(pyrogram.filters.command(['start']))
