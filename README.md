@@ -35,3 +35,16 @@ Telegram bot to mux subtitle with video.
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details
 
+#If you're not using Docker, add FFmpeg to the startup command in Koyeb Service Settings:
+
+1. Open Koyeb Dashboard.
+
+
+2. Go to Your Service → Click Edit.
+
+
+3. In the Command section, update it to:
+
+apt update && apt install -y ffmpeg && python muxbot.py
+
+This installs FFmpeg before running your bot.
