@@ -19,15 +19,8 @@ async def help_user(bot, update):
     if str(update.from_user.id) in Config.ALLOWED_USERS:
         await bot.send_message(
             chat_id=update.chat.id,
-            text=Chat.HELP_TEXT,
-            parse_mode="HTML",  # ✅ FIXED: Changed "html" to "HTML"
+            text=Chat.HELP_TEXT,  # ❌ Removed parse_mode
             disable_web_page_preview=True,
-            reply_to_message_id=update.id
-        )
-    else:
-        await bot.send_message(
-            chat_id=update.chat.id,
-            text=Chat.NO_AUTH_USER,
             reply_to_message_id=update.id
         )
 
