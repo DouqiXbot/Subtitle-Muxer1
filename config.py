@@ -4,7 +4,7 @@ import os
 class Config:
     
     # Font Configuration
-    FONT_NAME = "Helvetica Rounded Bold"  # Default font name
+    FONT_NAME = "HelveticaRounded-Bold"  # Default font name
     FONT_SIZE = 20       # Default font size
     FONT_COLOR = "&H00FFFFFF"  # ARGB format (White)
     BORDER_COLOR = "&H00000000"  # ARGB format (Black)
