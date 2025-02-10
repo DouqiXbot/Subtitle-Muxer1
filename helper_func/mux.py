@@ -95,7 +95,6 @@ async def softmux_vid(vid_filename, sub_filename, msg):
 
 
 async def hardmux_vid(vid_filename, sub_filename, msg):
-    
     start = time.time()
     vid = Config.DOWNLOAD_DIR+'/'+vid_filename
     sub = Config.DOWNLOAD_DIR+'/'+sub_filename
@@ -103,35 +102,42 @@ async def hardmux_vid(vid_filename, sub_filename, msg):
     out_file = '.'.join(vid_filename.split('.')[:-1])
     output = out_file+'1.mp4'
     out_location = Config.DOWNLOAD_DIR+'/'+output
+
+    # Build style string from Config
+    style_params = (
+        f"FontName={Config.FONT_NAME},"
+        f"FontSize={Config.FONT_SIZE},"
+        f"PrimaryColour={Config.FONT_COLOR},"
+        f"BackColour={Config.BORDER_COLOR},"
+        f"Outline={Config.BORDER_WIDTH}"
+    )
     
     command = [
-            'ffmpeg','-hide_banner',
-            '-i',vid,
-            '-vf','subtitles='+sub,
-            '-c:v','h264',
-            '-map','0:v:0',
-            '-map','0:a:0?',
-            '-preset','ultrafast',
-            '-y',out_location
-            ]
-    process = await asyncio.create_subprocess_exec(
-            *command,
-            # stdout must a pipe to be accessible as process.stdout
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            )
+        'ffmpeg', '-hide_banner',
+        '-i', vid,
+        '-vf', f'subtitles={sub}:force_style=\'{style_params}\'',
+        '-c:v', 'h264',
+        '-map', '0:v:0',
+        '-map', '0:a:0?',
+        '-preset', 'ultrafast',
+        '-y', out_location
+    ]
     
-    # https://github.com/jonghwanhyeon/python-ffmpeg/blob/ccfbba93c46dc0d2cafc1e40ecb71ebf3b5587d2/ffmpeg/ffmpeg.py#L114
+    process = await asyncio.create_subprocess_exec(
+        *command,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
     
     await asyncio.wait([
-            read_stderr(start,msg, process),
-            process.wait(),
-        ])
+        read_stderr(start, msg, process),
+        process.wait(),
+    ])
     
     if process.returncode == 0:
-        await msg.edit('Muxing  Completed Successfully!\n\nTime taken : {} seconds'.format(round(start-time.time())))
+        await msg.edit(f'Muxing Completed Successfully!\n\nTime taken: {round(time.time()-start)} seconds')
     else:
-        await msg.edit('An Error occured while Muxing!')
+        await msg.edit('An Error occurred while Muxing!')
         return False
     
     time.sleep(2)
