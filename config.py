@@ -2,6 +2,14 @@
 import os
 
 class Config:
+    
+    # Font Configuration
+    FONT_NAME = "Helvetica Rounded Bold"  # Default font name
+    FONT_SIZE = 20       # Default font size
+    FONT_COLOR = "&H00FFFFFF"  # ARGB format (White)
+    BORDER_COLOR = "&H00000000"  # ARGB format (Black)
+    BORDER_WIDTH = 1.5
+    # Add other existing configurations below...
 
     BOT_TOKEN = os.environ.get('BOT_TOKEN', None)
     APP_ID = os.environ.get('APP_ID', None)
