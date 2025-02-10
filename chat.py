@@ -2,22 +2,23 @@
 class Chat:
 
     START_TEXT = """<b>Hey,</b>
-<b>This is a Telegram Bot to Mux subtitle into a video</b>
+    
+<b>This is a Telegram Bot to Mux subtitle into a video With Font Style</b>
 
 <b>Send me a Telegram file to begin</b>
 
-/help for more details..
+<b>/help for more details..</b>
 
-Credits :- @SultanMehmed_TG
+<b>Credits :- @Dou_Di_Emperor</b>
     """
 
     HELP_USER = "??"
 
     HELP_TEXT ="""<b>Welcome to the Help Menu</b>
 
-1.) Send a Video file or url.
-2.) Send a subtitle file (ass or srt)
-3.) Choose you desired type of muxing!
+<b>• Send a Video file or url.</b>
+<b>• Send a subtitle file (ass or srt)</b>
+<b>• Choose you desired type of muxing!</b>
 
 To give custom name to file send it with url seperated with |
 <i>url|custom_name.mp4</i>
