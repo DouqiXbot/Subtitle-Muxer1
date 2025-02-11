@@ -80,39 +80,45 @@ async def hardmux_vid(vid_filename, sub_filename, msg):
     output = f"{os.path.splitext(vid_filename)[0]}_hardmuxed.mp4"
     out_location = os.path.join(Config.DOWNLOAD_DIR, output)
 
-    # Check if font exists
-    font_path = f"/usr/share/fonts/truetype/custom/{Config.FONT_NAME}.ttf"
+    # Correct Font Path
+    font_path = os.path.join(os.getcwd(), "fonts", "HelveticaRounded-Bold.ttf")
+
     if not os.path.exists(font_path):
-        font_path = Config.FONT_NAME  # Use font name fallback
+        await msg.edit("❌ Font file not found! Make sure 'HelveticaRounded-Bold.ttf' is in the 'fonts' directory.")
+        return False
 
-    # Ensure subtitle path is correctly formatted
-    sub = f'"{sub}"' if " " in sub else sub
+    # Ensure subtitle path is correctly formatted for FFmpeg
+    formatted_sub = sub.replace(":", "\\:") if ":" in sub else sub
+    formatted_sub = f"'{formatted_sub}'" if " " in formatted_sub else formatted_sub
 
+    # FFmpeg Hardcoded Subtitles Command
     command = [
         'ffmpeg', '-hide_banner',
         '-i', vid,
-        '-vf', f"subtitles={sub}:force_style='FontName={font_path},FontSize={Config.FONT_SIZE},PrimaryColour={Config.FONT_COLOR},BackColour={Config.BORDER_COLOR},Outline={Config.BORDER_WIDTH}'",
-        '-c:v', 'h264',
-        '-map', '0:v:0',
-        '-map', '0:a:0?',
+        '-vf', (
+            f"subtitles={formatted_sub}:force_style="
+            f"'FontName=HelveticaRounded-Bold,FontSize={Config.FONT_SIZE},"
+            f"PrimaryColour={Config.FONT_COLOR},Outline={Config.BORDER_WIDTH}'"
+        ),
+        '-c:v', 'libx264',  # Ensure proper encoding
         '-preset', 'ultrafast',
         '-y', out_location
     ]
 
+    # Run FFmpeg Process
     process = await asyncio.create_subprocess_exec(
         *command,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
 
-    # Capture stderr output for error handling
     error_output = await read_stderr(start, msg, process)
 
+    # Check for errors
     if process.returncode == 0:
-        await msg.edit(f'Muxing Completed Successfully!\nTime taken: {round(time.time() - start)}s')
+        await msg.edit(f'✅ Muxing Completed Successfully!\nTime taken: {round(time.time() - start)}s')
         return output
     else:
-        # Trim error output to fit Telegram's 4096-character limit
         trimmed_error = error_output[-3000:] if len(error_output) > 3000 else error_output
-        await msg.edit(f'An Error occurred while Muxing!\n\nError (last part shown):\n```{trimmed_error}```')
+        await msg.edit(f'❌ An Error occurred while Muxing!\n\nError (last part shown):\n```{trimmed_error}```')
         return False
