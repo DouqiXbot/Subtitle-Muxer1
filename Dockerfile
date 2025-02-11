@@ -4,12 +4,11 @@ FROM python:3.10
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     fontconfig \
-    && fc-cache -f
+    && fc-cache -f -v
 
 # Copy custom fonts
-COPY fonts/ /usr/share/fonts/custom/
-RUN fc-cache -f -v
-
+COPY fonts/ /usr/share/fonts/truetype/custom/
+RUN fc-cache -f -v && fc-list | grep HelveticaRounded
 # Set working directory
 WORKDIR /app
 
