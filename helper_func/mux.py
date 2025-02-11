@@ -103,25 +103,16 @@ async def hardmux_vid(vid_filename, sub_filename, msg):
     output = out_file+'1.mp4'
     out_location = Config.DOWNLOAD_DIR+'/'+output
 
-    # Build style string from Config
-    style_params = (
-        f"FontName={Config.FONT_NAME},"
-        f"FontSize={Config.FONT_SIZE},"
-        f"PrimaryColour={Config.FONT_COLOR},"
-        f"BackColour={Config.BORDER_COLOR},"
-        f"Outline={Config.BORDER_WIDTH}"
-    )
-    
     command = [
-        'ffmpeg', '-hide_banner',
-        '-i', vid,
-        '-vf', f'subtitles={sub}:force_style=\'{style_params}\'',
-        '-c:v', 'h264',
-        '-map', '0:v:0',
-        '-map', '0:a:0?',
-        '-preset', 'ultrafast',
-        '-y', out_location
-    ]
+    'ffmpeg', '-hide_banner',
+    '-i', vid,
+    '-vf', f"subtitles='{sub}':force_style=\"FontName='{Config.FONT_NAME}',FontSize={Config.FONT_SIZE},PrimaryColour={Config.FONT_COLOR},BackColour={Config.BORDER_COLOR},Outline={Config.BORDER_WIDTH}\"",
+    '-c:v', 'h264',
+    '-map', '0:v:0',
+    '-map', '0:a:0?',
+    '-preset', 'ultrafast',
+    '-y', out_location
+]
     
     process = await asyncio.create_subprocess_exec(
         *command,
