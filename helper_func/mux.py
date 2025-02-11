@@ -107,9 +107,11 @@ async def hardmux_vid(vid_filename, sub_filename, msg):
 
     error_output = await read_stderr(start, msg, process)
 
-    if process.returncode == 0:
-        await msg.edit(f'Muxing Completed Successfully!\nTime taken: {round(time.time() - start)}s')
-        return output
-    else:
-        await msg.edit(f'An Error occurred while Muxing!\n\nError:\n```{error_output}```')
-        return False
+    if process.returncode != 0:
+    error_output = (await process.stderr.read()).decode('utf-8')
+    
+    # Trim error output to fit in Telegram's limit (4096 characters)
+    trimmed_error = error_output[-3000:] if len(error_output) > 3000 else error_output
+    
+    await msg.edit(f'An Error occurred while Muxing!\n\nError (last part shown):\n```{trimmed_error}```')
+    return False
