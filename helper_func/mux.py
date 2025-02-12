@@ -73,7 +73,7 @@ async def softmux_vid(vid_filename, sub_filename, msg):
         return False
 
 
-async def hardmux_vid(vid_filename, sub_filename, msg, add_logo=False, logo_path=None):
+async def hardmux_vid(vid_filename, sub_filename, msg):
     start = time.time()
     vid = os.path.join(Config.DOWNLOAD_DIR, vid_filename)
     sub = os.path.join(Config.DOWNLOAD_DIR, sub_filename)
@@ -81,34 +81,38 @@ async def hardmux_vid(vid_filename, sub_filename, msg, add_logo=False, logo_path
     output = f"{os.path.splitext(vid_filename)[0]}_hardmuxed.mp4"
     out_location = os.path.join(Config.DOWNLOAD_DIR, output)
 
-    font_path = os.path.join('fonts', 'HelveticaRounded-Bold.ttf')
+    # Correct Font Path
+    font_path = os.path.join(os.getcwd(), "fonts", "HelveticaRounded-Bold.ttf")
+
     if not os.path.exists(font_path):
-        await msg.edit(f"Font file not found at {font_path}.")
+        await msg.edit("❌ Font file not found! Make sure 'HelveticaRounded-Bold.ttf' is in the 'fonts' directory.")
         return False
 
-    if not os.path.exists(sub):
-        await msg.edit(f"Subtitle file not found at {sub}.")
-        return False
+    # Format subtitle path for FFmpeg filter
+    formatted_sub = sub.replace(":", "\\:") if ":" in sub else sub
+    formatted_sub = f"'{formatted_sub}'" if " " in formatted_sub else formatted_sub
 
-    vf_filters = [
-        f"subtitles={sub}:force_style='FontName={font_path},FontSize={Config.FONT_SIZE},PrimaryColour={Config.FONT_COLOR},BackColour={Config.BORDER_COLOR},Outline={Config.BORDER_WIDTH}'"
-    ]
-
+    # FFmpeg command with drawtext, HEVC encoding, and quality settings
     command = [
-        'ffmpeg', '-hide_banner', '-i', vid
+        'ffmpeg', '-hide_banner',
+        '-i', vid,
+        '-vf', (
+            f"subtitles={formatted_sub}:force_style="
+            f"'FontName=HelveticaRounded-Bold,FontSize={Config.FONT_SIZE},"
+            f"PrimaryColour={Config.FONT_COLOR},Outline={Config.BORDER_WIDTH}',"
+            f"drawtext=text='{Config.WATERMARK}':fontfile='{font_path}':"
+            "x=w-tw-10:y=10:fontsize=24:fontcolor=white:"
+            "box=1:boxcolor=black@0.5"
+        ),
+        '-c:v', 'libx265',
+        '-preset', 'fast',
+        '-crf', '20',
+        '-tag:v', 'hvc1',
+        '-c:a', 'copy',
+        '-y', out_location
     ]
 
-    if add_logo and logo_path:
-        if not os.path.exists(logo_path):
-            await msg.edit(f"Logo file not found at {logo_path}.")
-            return False
-
-        command.extend(['-i', logo_path])  # Add logo input
-        vf_filters.append(f"[0:v][1:v] overlay=W-w-10:10")  # Overlay the logo
-
-    vf = ",".join(vf_filters)
-    command.extend(['-vf', vf, '-c:v', 'libx265', '-preset', 'ultrafast', '-crf', '23', '-pix_fmt', 'yuv420p10le', '-c:a', 'copy', '-y', out_location])
-
+    # Run FFmpeg Process
     process = await asyncio.create_subprocess_exec(
         *command,
         stdout=asyncio.subprocess.PIPE,
@@ -118,8 +122,9 @@ async def hardmux_vid(vid_filename, sub_filename, msg, add_logo=False, logo_path
     error_output = await read_stderr(start, msg, process)
 
     if process.returncode == 0:
-        await msg.edit(f'Muxing Completed Successfully!\nTime taken: {round(time.time() - start)}s')
+        await msg.edit(f'✅ Muxing Completed Successfully!\nTime taken: {round(time.time() - start)}s')
         return output
     else:
-        await msg.edit(f'An Error occurred while Muxing!\n\nError:\n```{error_output}```')
+        trimmed_error = error_output[-3000:] if len(error_output) > 3000 else error_output
+        await msg.edit(f'❌ An Error occurred while Muxing!\n\nError (last part shown):\n```{trimmed_error}```')
         return False
