@@ -102,7 +102,7 @@ async def hardmux_vid(vid_filename, sub_filename, msg):
             "x=w-tw-10:y=10:fontsize=24:fontcolor=white:"
             "box=1:boxcolor=black@0.5"
         ),
-        '-c:v', 'libx265', '-preset', 'fast', '-crf', '20',
+        '-c:v', 'libx265', '-preset', 'ultrafast', '-crf', '20',
         '-tag:v', 'hvc1', '-c:a', 'copy', '-y', out_location
     ]
 
