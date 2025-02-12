@@ -80,49 +80,49 @@ async def hardmux(client, message):
     og_vid_filename = db.get_vid_filename(chat_id)
     og_sub_filename = db.get_sub_filename(chat_id)
     text = ''
-    if not og_vid_filename :
+    if not og_vid_filename:
         text += 'First send a Video File\n'
-    if not og_sub_filename :
+    if not og_sub_filename:
         text += 'Send a Subtitle File!'
     
-    if not (og_sub_filename or og_vid_filename) :
+    if not (og_sub_filename and og_vid_filename):  # Fixed condition (was using `or` instead of `and`)
         return await client.send_message(chat_id, text)
     
     text = 'Your File is Being Hard Subbed. This might take a long time!'
     sent_msg = await client.send_message(chat_id, text)
 
-    hardmux_filename = await hardmux_vid(og_vid_filename, og_sub_filename, sent_msg)
+    hardmux_filename = await hardmux_vid(og_vid_filename, og_sub_filename, sent_msg, client, chat_id)
     
     if not hardmux_filename:
         return
     
     final_filename = db.get_filename(chat_id)
-    os.rename(Config.DOWNLOAD_DIR+'/'+hardmux_filename,Config.DOWNLOAD_DIR+'/'+final_filename)
+    os.rename(Config.DOWNLOAD_DIR + '/' + hardmux_filename, Config.DOWNLOAD_DIR + '/' + final_filename)
     
     start_time = time.time()
     try:
         await client.send_video(
-                chat_id, 
-                progress = progress_bar, 
-                progress_args = (
-                    'Uploading your File!',
-                    sent_msg,
-                    start_time
-                    ), 
-                video = os.path.join(Config.DOWNLOAD_DIR, final_filename),
-                caption = final_filename
-                )
-        text = 'File Successfully Uploaded!\nTotal Time taken : {} seconds'.format(round(time.time()-start_time))
+            chat_id, 
+            progress=progress_bar, 
+            progress_args=(
+                'Uploading your File!',
+                sent_msg,
+                start_time
+            ), 
+            video=os.path.join(Config.DOWNLOAD_DIR, final_filename),
+            caption=final_filename
+        )
+        text = 'File Successfully Uploaded!\nTotal Time taken : {} seconds'.format(round(time.time() - start_time))
         await sent_msg.edit(text)
     except Exception as e:
         print(e)
-        await client.send_message(chat_id, 'An error occured while uploading the file!\nCheck logs for details of the error!')
+        await client.send_message(chat_id, 'An error occurred while uploading the file!\nCheck logs for details of the error!')
     
-    path = Config.DOWNLOAD_DIR+'/'
-    os.remove(path+og_sub_filename)
-    os.remove(path+og_vid_filename)
-    try :
-        os.remove(path+final_filename)
-    except :
+    path = Config.DOWNLOAD_DIR + '/'
+    os.remove(path + og_sub_filename)
+    os.remove(path + og_vid_filename)
+    try:
+        os.remove(path + final_filename)
+    except:
         pass
     db.erase(chat_id)
