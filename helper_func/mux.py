@@ -73,7 +73,7 @@ async def softmux_vid(vid_filename, sub_filename, msg):
         return False
 
 
-async def hardmux_vid(vid_filename, sub_filename, msg, add_logo=False, logo_path=None):
+async def hardmux_vid(vid_filename, sub_filename, msg, client, chat_id):
     start = time.time()
     vid = os.path.join(Config.DOWNLOAD_DIR, vid_filename)
     sub = os.path.join(Config.DOWNLOAD_DIR, sub_filename)
@@ -86,15 +86,19 @@ async def hardmux_vid(vid_filename, sub_filename, msg, add_logo=False, logo_path
         await msg.edit(f"Font file not found at {font_path}. Please ensure the font file exists.")
         return False
 
+    # Get the logo for this user or use the default
+    logo_path = Config.LOGO_PATHS.get(str(chat_id), Config.LOGO_PATHS.get("default"))
+
+    if not os.path.exists(logo_path):
+        await msg.edit(f"Logo file not found at {logo_path}. Please ensure the logo file exists.")
+        return False
+
     sub = f'"{sub}"' if " " in sub else sub
 
-    vf_filters = [f"subtitles={sub}:force_style='FontName={font_path},FontSize={Config.FONT_SIZE},PrimaryColour={Config.FONT_COLOR},BackColour={Config.BORDER_COLOR},Outline={Config.BORDER_WIDTH}'"]
-
-    if add_logo and logo_path:
-        if not os.path.exists(logo_path):
-            await msg.edit(f"Logo file not found at {logo_path}. Please ensure the logo file exists.")
-            return False
-        vf_filters.append(f"movie={logo_path} [logo]; [in][logo] overlay=W-w-10:10 [out]")
+    vf_filters = [
+        f"subtitles={sub}:force_style='FontName={font_path},FontSize={Config.FONT_SIZE},PrimaryColour={Config.FONT_COLOR},BackColour={Config.BORDER_COLOR},Outline={Config.BORDER_WIDTH}'",
+        f"movie={logo_path} [logo]; [in][logo] overlay=W-w-10:10 [out]"
+    ]
 
     vf = ",".join(vf_filters)
 
