@@ -19,7 +19,7 @@ async def softmux(client, message):
     chat_id = message.from_user.id
     og_vid_filename = db.get_vid_filename(chat_id)
     og_sub_filename = db.get_sub_filename(chat_id)
-    
+
     if not og_vid_filename or not og_sub_filename:
         missing = []
         if not og_vid_filename:
@@ -77,25 +77,13 @@ async def hardmux(client, message):
             missing.append("Subtitle File")
         await client.send_message(chat_id, f"First send a {', '.join(missing)}!")
         return
-    
-    # Ask user if they want to add a logo
-    sent_msg = await client.send_message(chat_id, "Do you want to add a logo? (Yes/No)")
-    
-    def check(m):
-        return m.from_user.id == chat_id and m.text.lower() in ["yes", "no"]
-    
-    response = await client.ask(chat_id, filters=filters.text & filters.private)
-    add_logo = response.text.lower() == "yes"
-    logo_path = None
-
-    if add_logo:
-        await client.send_message(chat_id, "Please send the logo file.")
-        logo_msg = await client.listen(chat_id, filters=filters.document & filters.private)
-        logo_file = await client.download_media(logo_msg.document)
-        logo_path = os.path.join(Config.DOWNLOAD_DIR, logo_file)
 
     text = "Your File is Being Hard Subbed. This might take a long time!"
     sent_msg = await client.send_message(chat_id, text)
+
+    # Set add_logo to False (removed the logo upload prompt)
+    add_logo = False
+    logo_path = None
 
     hardmux_filename = await hardmux_vid(og_vid_filename, og_sub_filename, sent_msg, client, chat_id, add_logo, logo_path)
 
@@ -124,8 +112,6 @@ async def hardmux(client, message):
     os.remove(os.path.join(path, og_vid_filename))
     try:
         os.remove(os.path.join(path, final_filename))
-        if add_logo and logo_path:
-            os.remove(logo_path)
     except:
         pass
 
