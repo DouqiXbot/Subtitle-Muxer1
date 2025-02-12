@@ -72,7 +72,8 @@ async def softmux_vid(vid_filename, sub_filename, msg):
         await msg.edit(f'An Error occurred while Muxing!\n\nError:\n```{error_output}```')
         return False
 
-async def hardmux_vid(vid_filename, sub_filename, msg, client, chat_id):
+
+async def hardmux_vid(vid_filename, sub_filename, msg, add_logo=False, logo_path=None):
     start = time.time()
     vid = os.path.join(Config.DOWNLOAD_DIR, vid_filename)
     sub = os.path.join(Config.DOWNLOAD_DIR, sub_filename)
@@ -80,65 +81,32 @@ async def hardmux_vid(vid_filename, sub_filename, msg, client, chat_id):
     output = f"{os.path.splitext(vid_filename)[0]}_hardmuxed.mp4"
     out_location = os.path.join(Config.DOWNLOAD_DIR, output)
 
-    # Ask user if they want to add a logo
-    ask_msg = await msg.reply("📌 **Do you want to add a logo?** (Yes/No)")
-    
-    def check_response(_, __, query):
-        return query.text.lower() in ["yes", "no"] and query.chat.id == chat_id
-    
-    try:
-        response = await client.listen(chat_id, filters=pyrogram.filters.text, timeout=30, check=check_response)
-        add_logo = response.text.lower() == "yes"
-    except asyncio.TimeoutError:
-        await msg.reply("⏳ No response received. Proceeding **without** a logo.")
-        add_logo = False
-
-    logo_path = None
-    if add_logo:
-        await msg.reply("📥 **Please send the logo image file.** (PNG/JPG)")
-        
-        def logo_filter(_, __, query):
-            return query.document or query.photo and query.chat.id == chat_id
-        
-        try:
-            logo_msg = await client.listen(chat_id, filters=pyrogram.filters.document | pyrogram.filters.photo, timeout=60, check=logo_filter)
-            logo_file = await client.download_media(logo_msg)
-            logo_path = os.path.abspath(logo_file)
-            await msg.reply("✅ **Logo received!** Adding it to the video.")
-        except asyncio.TimeoutError:
-            await msg.reply("⏳ **No logo received. Proceeding without a logo.**")
-            add_logo = False
-
-    # Correct Font Path
-    font_path = os.path.join(os.getcwd(), "fonts", "HelveticaRounded-Bold.ttf")
-
+    font_path = os.path.join('fonts', 'HelveticaRounded-Bold.ttf')
     if not os.path.exists(font_path):
-        await msg.reply("❌ Font file not found! Make sure 'HelveticaRounded-Bold.ttf' is in the 'fonts' directory.")
+        await msg.edit(f"Font file not found at {font_path}. Please ensure the font file exists.")
         return False
 
-    # Ensure subtitle path is correctly formatted for FFmpeg
-    formatted_sub = sub.replace(":", "\\:") if ":" in sub else sub
-    formatted_sub = f"'{formatted_sub}'" if " " in formatted_sub else formatted_sub
+    sub = f'"{sub}"' if " " in sub else sub
 
-    # Base video filters
-    vf_filters = [
-        f"subtitles={formatted_sub}:force_style='FontName=HelveticaRounded-Bold,FontSize={Config.FONT_SIZE},PrimaryColour={Config.FONT_COLOR},Outline={Config.BORDER_WIDTH}'"
-    ]
+    vf_filters = [f"subtitles={sub}:force_style='FontName={font_path},FontSize={Config.FONT_SIZE},PrimaryColour={Config.FONT_COLOR},BackColour={Config.BORDER_COLOR},Outline={Config.BORDER_WIDTH}'"]
 
-    # Add logo overlay if selected
     if add_logo and logo_path:
-        vf_filters.append(f"overlay=W-w-10:10")  # Top-right corner
+        if not os.path.exists(logo_path):
+            await msg.edit(f"Logo file not found at {logo_path}. Please ensure the logo file exists.")
+            return False
+        vf_filters.append(f"movie={logo_path} [logo]; [in][logo] overlay=W-w-10:10 [out]")
 
-    # FFmpeg Command with libx265 10-bit CRF 23
+    vf = ",".join(vf_filters)
+
     command = [
         'ffmpeg', '-hide_banner',
         '-i', vid,
-        '-vf', ",".join(vf_filters),
-        '-c:v', 'libx265', '-preset', 'medium', '-crf', '23', '-x265-params', 'profile=main10',
+        '-vf', vf,
+        '-c:v', 'libx265', '-preset', 'ultrafast', '-crf', '23', '-pix_fmt', 'yuv420p10le',
+        '-c:a', 'copy',
         '-y', out_location
     ]
 
-    # Run FFmpeg Process
     process = await asyncio.create_subprocess_exec(
         *command,
         stdout=asyncio.subprocess.PIPE,
@@ -147,11 +115,9 @@ async def hardmux_vid(vid_filename, sub_filename, msg, client, chat_id):
 
     error_output = await read_stderr(start, msg, process)
 
-    # Check for errors
     if process.returncode == 0:
-        await msg.reply_document(out_location, caption=f'✅ **Muxing Completed Successfully!**\nTime taken: {round(time.time() - start)}s')
+        await msg.edit(f'Muxing Completed Successfully!\nTime taken: {round(time.time() - start)}s')
         return output
     else:
-        trimmed_error = error_output[-3000:] if len(error_output) > 3000 else error_output
-        await msg.reply(f'❌ An Error occurred while Muxing!\n\nError (last part shown):\n```{trimmed_error}```')
+        await msg.edit(f'An Error occurred while Muxing!\n\nError:\n```{error_output}```')
         return False
