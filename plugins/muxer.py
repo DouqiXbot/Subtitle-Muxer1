@@ -84,8 +84,7 @@ async def hardmux(client, message):
     def check(m):
         return m.from_user.id == chat_id and m.text.lower() in ["yes", "no"]
     
-    response = await client.listen(chat_id, filters=filters.text & filters.private, check=check)
-
+    response = await client.ask(chat_id, filters=filters.text & filters.private)
     add_logo = response.text.lower() == "yes"
     logo_path = None
 
