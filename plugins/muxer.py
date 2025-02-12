@@ -94,7 +94,8 @@ async def hardmux(client, message):
     text = "Your File is Being Hard Subbed. This might take a long time!"
     sent_msg = await client.send_message(chat_id, text)
 
-    hardmux_filename = await hardmux_vid(og_vid_filename, og_sub_filename, sent_msg, client, chat_id, logo_path)
+    # FIXED: Pass the correct parameters
+    hardmux_filename = await hardmux_vid(og_vid_filename, og_sub_filename, sent_msg, logo_path=logo_path)
 
     if not hardmux_filename:
         return
