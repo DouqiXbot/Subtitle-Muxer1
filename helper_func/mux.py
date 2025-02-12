@@ -86,27 +86,45 @@ async def hardmux_vid(vid_filename, sub_filename, msg, add_logo=False, logo_path
         await msg.edit(f"Font file not found at {font_path}. Please ensure the font file exists.")
         return False
 
-    if add_logo and (not logo_path or not os.path.exists(logo_path)):
-        await msg.edit("Logo file is missing or invalid. Please check the path.")
-        return False
+    # Escape paths for ffmpeg filters
+    sub_escaped = sub.replace("'", "''")
+    font_path_escaped = font_path.replace("'", "''")
+    subtitle_filter = (
+        f"subtitles='{sub_escaped}':force_style="
+        f"'FontName={font_path_escaped},FontSize={Config.FONT_SIZE},"
+        f"PrimaryColour={Config.FONT_COLOR},BackColour={Config.BORDER_COLOR},"
+        f"Outline={Config.BORDER_WIDTH}'"
+    )
 
-    sub = f'"{sub}"' if " " in sub else sub
+    command = ['ffmpeg', '-hide_banner', '-i', vid]
 
-    vf_filters = [f"subtitles={sub}:force_style='FontName={font_path},FontSize={Config.FONT_SIZE},PrimaryColour={Config.FONT_COLOR},BackColour={Config.BORDER_COLOR},Outline={Config.BORDER_WIDTH}'"]
+    if add_logo and logo_path:
+        if not os.path.exists(logo_path):
+            await msg.edit(f"Logo file not found at {logo_path}. Please ensure the logo file exists.")
+            return False
+        logo_escaped = logo_path.replace("'", "''")
+        filter_complex = (
+            f"[0:v]{subtitle_filter}[v_subs];"
+            f"movie='{logo_escaped}'[logo];"
+            f"[v_subs][logo]overlay=W-w-10:10[v_out]"
+        )
+        command.extend([
+            '-filter_complex', filter_complex,
+            '-map', '[v_out]',
+            '-map', '0:a',
+        ])
+    else:
+        command.extend([
+            '-vf', subtitle_filter,
+            '-map', '0:v:0',
+            '-map', '0:a:0',
+        ])
 
-    if add_logo:
-        vf_filters.append(f"movie='{logo_path}' [logo]; [0:v][logo] overlay=W-w-10:10")
-
-    vf = ",".join(vf_filters)
-
-    command = [
-        'ffmpeg', '-hide_banner',
-        '-i', vid,
-        '-vf', vf,
+    command.extend([
         '-c:v', 'libx265', '-preset', 'ultrafast', '-crf', '23', '-pix_fmt', 'yuv420p10le',
         '-c:a', 'copy',
         '-y', out_location
-    ]
+    ])
 
     process = await asyncio.create_subprocess_exec(
         *command,
