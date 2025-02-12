@@ -89,8 +89,8 @@ async def hardmux_vid(vid_filename, sub_filename, msg):
         return False
 
     # ✅ Format Subtitle Path
-    formatted_sub = f"'{sub.replace(':', '\\:')}'" if " " in sub else sub
-
+    formatted_sub = "'{}'".format(sub.replace(":", "\\:")) if " " in sub else sub.replace(":", "\\:")
+    
     # ✅ FFmpeg Command
     command = [
         'ffmpeg', '-hide_banner', '-i', vid,
