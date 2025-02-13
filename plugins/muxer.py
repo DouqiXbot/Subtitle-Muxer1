@@ -94,11 +94,11 @@ async def hardmux(client, message):
 
     start_time = time.time()
     try:
-        await client.send_video(
+        await client.send_document(  # 🔥 Changed from send_video to send_document
             chat_id,
             progress=progress_bar,
             progress_args=('Uploading your File!', sent_msg, start_time),
-            video=os.path.join(Config.DOWNLOAD_DIR, final_filename),
+            document=os.path.join(Config.DOWNLOAD_DIR, final_filename),
             caption=final_filename
         )
         await sent_msg.edit(f'File Successfully Uploaded!\nTotal Time taken: {round(time.time() - start_time)} seconds')
