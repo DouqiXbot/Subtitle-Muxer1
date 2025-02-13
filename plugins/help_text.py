@@ -37,9 +37,9 @@ async def start(bot, update):
         photo="https://envs.sh/EwN.jpg",  # Replace with actual image URL or file path
         caption=(
             f"**Hey {user_name}** 👋\n\n"
-            "**WELCOME TO** _VidBurner_\n\n"
-            "I will help you add subtitles to videos.\n\n"
-            "Created by 💕 [@CHS ANIME](https://t.me/DonghuaHindi)"
+            "**WELCOME TO VidBurner**\n\n"
+            "**I will help you add subtitles to videos.**\n\n"
+            "**Created by 💕 [@CHS ANIME](https://t.me/DonghuaHindi)**"
         ),
         reply_markup=buttons
     )
@@ -47,7 +47,7 @@ async def start(bot, update):
 @Client.on_callback_query(filters.regex("help"))
 async def help_callback(bot, query):
     help_text = (
-        "👋 **I am** VidBurner\n\n"
+        "👋 **I am VidBurner**\n\n"
         "**Welcome to the Help Section**\n\n"
         "1️⃣ Send a Video File.\n"
         "2️⃣ Send a Subtitle File. (ass or srt)\n"
@@ -68,14 +68,14 @@ async def help_callback(bot, query):
 async def about_callback(bot, query):
     about_text = (
         "👋 **About Me**\n\n"
-        "I am **VidBurner**, a bot designed to help you **add subtitles to videos** easily!\n"
+        "**I am VidBurner, a bot designed to help you add subtitles to videos easily!**\n"
         "I support both **softmux** and **hardmux** methods.\n\n"
         "⚡ **Features:**\n"
         "- Supports `.srt` and `.ass` subtitle formats.\n"
         "- High-speed video processing.\n"
         "- Easy-to-use commands.\n\n"
-        "📢 **Stay updated:** [Update Channel](https://t.me/DonghuaHindi)\n"
-        "💻 **Developed by:** @Blaze_Techz"
+        "📢 **Stay updated: [Update Channel](https://t.me/DonghuaHindi)**\n"
+        "💻 **Developed by: @Blaze_Techz**"
     )
 
     await query.message.edit_text(
@@ -83,4 +83,25 @@ async def about_callback(bot, query):
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("🔙 Back", callback_data="start")]
         ])
+    )
+  
+@Client.on_callback_query(filters.regex("start"))
+async def back_to_start(bot, query):
+    user_name = query.from_user.first_name  # User ka naam phir se lena hai
+
+    buttons = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔗 Source Code", url="https://github.com/your-repo")],
+        [InlineKeyboardButton("ℹ️ Help", callback_data="help"),
+         InlineKeyboardButton("📢 Updates", url="https://t.me/DonghuaHindi")],
+        [InlineKeyboardButton("ℹ️ About", callback_data="about")]
+    ])
+
+    await query.message.edit_caption(
+        caption=(
+            f"**Hey {user_name}** 👋\n\n"
+            "**WELCOME TO VidBurner**\n\n"
+            "**I will help you add subtitles to videos.**\n\n"
+            "**Created by 💕 [@CHS ANIME](https://t.me/DonghuaHindi)**"
+        ),
+        reply_markup=buttons
     )
