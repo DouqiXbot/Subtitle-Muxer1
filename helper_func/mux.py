@@ -35,6 +35,15 @@ async def safe_edit_message(msg, text):
             except Exception as retry_error:
                 print(f"Retry failed: {retry_error}")
 
+async def safe_send_message(client, chat_id, text, sent_msg=None):
+    """Ensure no duplicate messages are sent."""
+    if not sent_msg:
+        sent_msg = await client.send_message(chat_id, text)
+    else:
+        if sent_msg.text != text:  # Only edit if text is different
+            await sent_msg.edit(text)
+    return sent_msg
+
 async def read_stderr(start, msg, process, input_file, message):
     """Track FFmpeg progress and update the message."""
     error_log = []
