@@ -1,3 +1,8 @@
+import sys
+import os
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from pyrogram import Client
 from pyrogram.types import CallbackQuery
 from helper_func.dbhelper import Database as Db
