@@ -14,6 +14,15 @@ async def _check_user(filt, c, m):
 
 check_user = filters.create(_check_user)
 
+# This function ensures that we don't send the same message twice
+async def safe_send_message(client, chat_id, text, sent_msg=None):
+    if not sent_msg:
+        sent_msg = await client.send_message(chat_id, text)
+    else:
+        if sent_msg.text != text:  # Only edit if text is different
+            await sent_msg.edit(text)
+    return sent_msg
+
 @Client.on_message(filters.command('softmux') & check_user & filters.private)
 async def softmux(client, message):
     chat_id = message.from_user.id
@@ -31,9 +40,9 @@ async def softmux(client, message):
         await client.send_message(chat_id, text)
         return
 
-    sent_msg = await client.send_message(chat_id, 'Your File is Being Soft Subbed. This should be done in a few seconds!')
+    sent_msg = await safe_send_message(client, chat_id, 'Your File is Being Soft Subbed. This should be done in a few seconds!')
 
-    softmux_filename = await softmux_vid(og_vid_filename, og_sub_filename, sent_msg, message)
+    softmux_filename = await softmux_vid(og_vid_filename, og_sub_filename, sent_msg)
     if not softmux_filename:
         return
 
@@ -83,10 +92,9 @@ async def hardmux(client, message):
         await client.send_message(chat_id, text)
         return
 
-    sent_msg = await client.send_message(chat_id, 'Your File is Being Hard Subbed. This might take a long time!')
+    sent_msg = await safe_send_message(client, chat_id, 'Your File is Being Hard Subbed. This might take a long time!')
 
-    # Added message as argument here
-    hardmux_filename = await hardmux_vid(og_vid_filename, og_sub_filename, sent_msg, message)
+    hardmux_filename = await hardmux_vid(og_vid_filename, og_sub_filename, sent_msg)
     if not hardmux_filename:
         return
     
