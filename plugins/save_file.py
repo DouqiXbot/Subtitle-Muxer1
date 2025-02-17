@@ -7,7 +7,6 @@ from urllib.parse import quote, unquote
 from chat import Chat
 from config import Config
 from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from helper_func.progress_bar import progress_bar
 from helper_func.dbhelper import Database as Db
 
@@ -23,13 +22,6 @@ async def _check_user(filt, c, m):
     return str(m.from_user.id) in Config.ALLOWED_USERS
 
 check_user = filters.create(_check_user)
-
-def get_mux_buttons():
-    """Returns InlineKeyboardMarkup for muxing options."""
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("Softmux", callback_data="softmux"),
-         InlineKeyboardButton("Hardmux", callback_data="hardmux")]
-    ])
 
 @Client.on_message(filters.document & check_user & filters.private)
 async def save_doc(client, message):
@@ -58,18 +50,15 @@ async def save_doc(client, message):
 
     if ext in ["srt", "ass"]:
         db.put_sub(chat_id, filename)
-        text = "Subtitle file downloaded successfully."
-        reply_markup = get_mux_buttons() if db.check_video(chat_id) else None
+        text = "Subtitle file downloaded successfully.\nChoose your desired muxing!\n[ /softmux , /hardmux ]" if db.check_video(chat_id) else "Subtitle file downloaded.\nNow send Video File!"
     elif ext in ["mp4", "mkv"]:
         db.put_video(chat_id, filename, og_filename)
-        text = "Video file downloaded successfully."
-        reply_markup = get_mux_buttons() if db.check_sub(chat_id) else None
+        text = "Video file downloaded successfully.\nChoose your desired muxing.\n[ /softmux , /hardmux ]" if db.check_sub(chat_id) else "Video file downloaded successfully.\nNow send Subtitle file!"
     else:
         text = Chat.UNSUPPORTED_FORMAT.format(ext) + f"\nFile = {tg_filename}"
         os.remove(os.path.join(Config.DOWNLOAD_DIR, tg_filename))
-        reply_markup = None
 
-    await downloading.edit_text(text, reply_markup=reply_markup)
+    await downloading.edit_text(text)
 
 @Client.on_message(filters.video & check_user & filters.private)
 async def save_video(client, message):
@@ -97,10 +86,9 @@ async def save_video(client, message):
     os.rename(os.path.join(Config.DOWNLOAD_DIR, tg_filename), os.path.join(Config.DOWNLOAD_DIR, filename))
 
     db.put_video(chat_id, filename, og_filename)
-    text = "Video file downloaded successfully."
-    reply_markup = get_mux_buttons() if db.check_sub(chat_id) else None
+    text = "Video file downloaded successfully.\nChoose your desired muxing.\n[ /softmux , /hardmux ]" if db.check_sub(chat_id) else "Video file downloaded successfully.\nNow send Subtitle file!"
 
-    await downloading.edit_text(text, reply_markup=reply_markup)
+    await downloading.edit_text(text)
 
 @Client.on_message(filters.text & filters.regex(r"^https?://") & check_user)
 async def save_url(client, message):
@@ -153,10 +141,9 @@ async def save_url(client, message):
         pass
 
     db.put_video(chat_id, filename, save_filename)
-    text = "Video file downloaded successfully."
-    reply_markup = get_mux_buttons() if db.check_sub(chat_id) else None
+    text = "Video File Downloaded.\nChoose your desired muxing\n[ /softmux , /hardmux ]" if db.check_sub(chat_id) else "Video File Downloaded.\nNow send Subtitle file!"
 
     try:
-        await sent_msg.edit_text(text, reply_markup=reply_markup)
+        await sent_msg.edit_text(text)
     except:
         pass
