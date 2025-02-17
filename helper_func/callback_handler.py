@@ -1,7 +1,7 @@
 from pyrogram import Client, filters
 from pyrogram.types import CallbackQuery
 import logging
-from helper_func.muxer import softmux, hardmux  # Ensure correct import
+from plugins.muxer import softmux, hardmux  # Ensure correct import
 
 logging.basicConfig(level=logging.DEBUG)
 
