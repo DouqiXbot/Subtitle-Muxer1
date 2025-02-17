@@ -9,9 +9,11 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, InputMedi
 progress_pattern = re.compile(r'(frame|fps|size|time|bitrate|speed)\s*\=\s*(\S+)')
 
 def parse_progress(line):
+    """Extract progress details from FFmpeg output."""
     return {key: value for key, value in progress_pattern.findall(line)}
 
 async def readlines(stream):
+    """Asynchronously read lines from a stream."""
     pattern = re.compile(br'[\r\n]+')
     data = bytearray()
     while not stream.at_eof():
@@ -22,6 +24,7 @@ async def readlines(stream):
         data.extend(await stream.read(1024))
 
 async def safe_edit_message(msg, text):
+    """Edit message safely with retries."""
     try:
         await msg.edit(text)
     except Exception as e:
@@ -32,7 +35,8 @@ async def safe_edit_message(msg, text):
             except Exception as retry_error:
                 print(f"Retry failed: {retry_error}")
 
-async def read_stderr(start, msg, process):
+async def read_stderr(start, msg, process, input_file, message):
+    """Track FFmpeg progress and update the message."""
     error_log = []
     last_edit_time = time.time()
 
@@ -40,20 +44,47 @@ async def read_stderr(start, msg, process):
         line = line.decode('utf-8')
         error_log.append(line)
         progress = parse_progress(line)
-        
+
         if progress and (time.time() - last_edit_time >= 10):
-            text = f"🔄 **Processing...**\nSize: {progress.get('size', 'N/A')}\nTime: {progress.get('time', 'N/A')}\nSpeed: {progress.get('speed', 'N/A')}"
+            file_name = input_file if isinstance(input_file, str) else "Unknown"
+            user_id = message.from_user.id if message else "N/A"
+            user_name = message.from_user.first_name if message else "Unknown"
+            codec = progress.get("codec", "N/A")
+            total_size = progress.get("size", "N/A")
+            eta_size = progress.get("bitrate", "N/A")  # Approximated size
+            speed = progress.get("speed", "N/A")
+            eta = progress.get("time", "N/A")  # Estimated time
+            progress_bar = generate_progress_bar(progress.get("percent", 0))
+
+            text = (
+                f"File Name: `{file_name}`\n"
+                f"Progress: {progress_bar}\n"
+                f"Added by: {user_name} | `{user_id}`\n"
+                f"Codec: `{codec}`\n"
+                f"Total File Size: `{total_size}` | ETA Size: `{eta_size}`\n"
+                f"Speed: `{speed}` | ETA: `{eta}`\n\n"
+                f"/ffmpeg_log {{}}\n"
+                f"/cancel_process"
+            )
+
             await safe_edit_message(msg, text)
             last_edit_time = time.time()
 
     return "\n".join(error_log)
+
+def generate_progress_bar(percent):
+    """Generate a visual progress bar."""
+    total_blocks = 20
+    filled_blocks = int(total_blocks * percent / 100)
+    bar = "[" + "▣" * filled_blocks + "▢" * (total_blocks - filled_blocks) + "]"
+    return bar
 
 async def generate_screenshots(video_path, num_screenshots=5):
     """Generate multiple screenshots at fixed intervals."""
     screenshot_paths = []
 
     for i in range(num_screenshots):
-        timestamp = i * 10  # Take a screenshot every 10 seconds
+        timestamp = i * 10  # Screenshot every 10 seconds
         screenshot_filename = f"{os.path.splitext(os.path.basename(video_path))[0]}_screenshot_{i+1}.jpg"
         screenshot_path = os.path.join(Config.DOWNLOAD_DIR, screenshot_filename)
 
@@ -75,12 +106,13 @@ async def generate_screenshots(video_path, num_screenshots=5):
     return screenshot_paths
 
 async def send_screenshots(msg, screenshots):
-    """Send screenshots as a media group (album)."""
+    """Send screenshots as a media group."""
     if screenshots:
         media = [InputMediaPhoto(photo) for photo in screenshots]
         await msg.reply_media_group(media)
 
-async def softmux_vid(vid_filename, sub_filename, msg):
+async def softmux_vid(vid_filename, sub_filename, msg, message):
+    """Perform softmuxing with FFmpeg."""
     start = time.time()
     vid = os.path.join(Config.DOWNLOAD_DIR, vid_filename)
     sub = os.path.join(Config.DOWNLOAD_DIR, sub_filename)
@@ -99,21 +131,22 @@ async def softmux_vid(vid_filename, sub_filename, msg):
         *command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
     )
 
-    error_output = await read_stderr(start, msg, process)
+    error_output = await read_stderr(start, msg, process, vid_filename, message)
     await process.wait()
 
     if process.returncode == 0:
-        await safe_edit_message(msg, f'✅ **Muxing Completed!**\n⏳ Time: {round(time.time() - start)}s')
+        await safe_edit_message(msg, f'Muxing Completed!\nTime: {round(time.time() - start)}s')
 
         screenshots = await generate_screenshots(out_location)
         await send_screenshots(msg, screenshots)
 
         return output
     else:
-        await safe_edit_message(msg, f'❌ **Muxing Failed!**\n\nError:\n```{error_output}```')
+        await safe_edit_message(msg, f'Muxing Failed!\n\nError:\n```{error_output}```')
         return False
 
-async def hardmux_vid(vid_filename, sub_filename, msg):
+async def hardmux_vid(vid_filename, sub_filename, msg, message):
+    """Perform hardmuxing with FFmpeg."""
     start = time.time()
     vid = os.path.join(Config.DOWNLOAD_DIR, vid_filename)
     sub = os.path.join(Config.DOWNLOAD_DIR, sub_filename)
@@ -122,7 +155,7 @@ async def hardmux_vid(vid_filename, sub_filename, msg):
 
     font_path = os.path.join(os.getcwd(), "fonts", "HelveticaRounded-Bold.ttf")
     if not os.path.exists(font_path):
-        await safe_edit_message(msg, "❌ Font not found! Place 'HelveticaRounded-Bold.ttf' in 'fonts' folder.")
+        await safe_edit_message(msg, "Font not found! Place 'HelveticaRounded-Bold.ttf' in 'fonts' folder.")
         return False
 
     formatted_sub = "'{}'".format(sub.replace(":", "\\:")) if " " in sub else sub.replace(":", "\\:")
@@ -145,17 +178,16 @@ async def hardmux_vid(vid_filename, sub_filename, msg):
         *command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
     )
 
-    error_output = await read_stderr(start, msg, process)
+    error_output = await read_stderr(start, msg, process, vid_filename, message)
     await process.wait()
 
     if process.returncode == 0:
-        await safe_edit_message(msg, f'✅ **Muxing Completed!**\n⏳ Time: {round(time.time() - start)}s')
+        await safe_edit_message(msg, f'Muxing Completed!\nTime: {round(time.time() - start)}s')
 
         screenshots = await generate_screenshots(out_location)
         await send_screenshots(msg, screenshots)
 
         return output
     else:
-        trimmed_error = error_output[-3000:] if len(error_output) > 3000 else error_output
-        await safe_edit_message(msg, f'❌ **Muxing Failed!**\n\nError:\n```{trimmed_error}```')
+        await safe_edit_message(msg, f'Muxing Failed!\n\nError:\n```{error_output[-3000:]}```')
         return False
