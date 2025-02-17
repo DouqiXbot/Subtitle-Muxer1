@@ -1,5 +1,4 @@
-
-# (c) mohdsabahat
+# (c) DevXkirito
 
 import logging
 logging.basicConfig(level = logging.DEBUG,
@@ -8,15 +7,14 @@ logging.basicConfig(level = logging.DEBUG,
 logger = logging.getLogger(__name__)
 
 import os
-
 from config import Config
-
 from helper_func.dbhelper import Database as Db
+from helper_func import callback_handler  # Import callback handler
+
 db = Db().setup()
 
 import pyrogram
 logging.getLogger('pyrogram').setLevel(logging.WARNING)
-
 
 if __name__ == '__main__':
 
@@ -32,4 +30,5 @@ if __name__ == '__main__':
         api_hash = Config.API_HASH,
         plugins = plugins
     )
+    
     app.run()
