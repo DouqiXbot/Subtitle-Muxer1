@@ -1,24 +1,20 @@
-import sys
-import os
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-from pyrogram import Client
+from pyrogram import Client, filters
 from pyrogram.types import CallbackQuery
-from helper_func.dbhelper import Database as Db
-from plugins.muxer import softmux_vid as softmux, hardmux_vid as hardmux  # Import softmux & hardmux from muxxer.py
+import logging
+from helper_func.muxer import softmux, hardmux  # Ensure correct import
 
-db = Db()
+logging.basicConfig(level=logging.DEBUG)
 
-@Client.on_callback_query()
-async def callback_handler(client, callback_query: CallbackQuery):
-    data = callback_query.data
-    chat_id = callback_query.message.chat.id
+@Client.on_callback_query(filters.regex("softmux|hardmux"))
+async def callback_handler(client, query: CallbackQuery):
+    logging.debug(f"Received callback data: {query.data}")  # Debugging log
+    
+    chat_id = query.from_user.id
+    await query.answer()  # Acknowledge button press
 
-    if data == "softmux":
-        await callback_query.answer("Softmux started!", show_alert=False)
-        await softmux(client, callback_query.message)  # Call function directly
-
-    elif data == "hardmux":
-        await callback_query.answer("Hardmux started!", show_alert=False)
-        await hardmux(client, callback_query.message)  # Call function directly
+    if query.data == "softmux":
+        await query.message.edit_text("Starting Softmux...")
+        await softmux(client, query.message, chat_id)  # Call softmux function
+    elif query.data == "hardmux":
+        await query.message.edit_text("Starting Hardmux...")
+        await hardmux(client, query.message, chat_id)  # Call hardmux function
