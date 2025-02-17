@@ -3,6 +3,8 @@ import time
 import re
 import asyncio
 import os
+import json
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto
 
 progress_pattern = re.compile(r'(frame|fps|size|time|bitrate|speed)\s*\=\s*(\S+)')
 
@@ -24,27 +26,59 @@ async def safe_edit_message(msg, text):
         await msg.edit(text)
     except Exception as e:
         if "messages.EditMessage" in str(e):
-            await asyncio.sleep(10)  # Wait and retry if rate-limited
+            await asyncio.sleep(10)
             try:
                 await msg.edit(text)
             except Exception as retry_error:
-                print(f"Retry failed: {retry_error}")  # Avoid infinite loop
+                print(f"Retry failed: {retry_error}")
 
 async def read_stderr(start, msg, process):
     error_log = []
-    last_edit_time = time.time()  # Track last edit time
+    last_edit_time = time.time()
 
     async for line in readlines(process.stderr):
         line = line.decode('utf-8')
         error_log.append(line)
         progress = parse_progress(line)
         
-        if progress and (time.time() - last_edit_time >= 10):  # Update only every 10s
+        if progress and (time.time() - last_edit_time >= 10):
             text = f"🔄 **Processing...**\nSize: {progress.get('size', 'N/A')}\nTime: {progress.get('time', 'N/A')}\nSpeed: {progress.get('speed', 'N/A')}"
             await safe_edit_message(msg, text)
             last_edit_time = time.time()
 
     return "\n".join(error_log)
+
+async def generate_screenshots(video_path, num_screenshots=5):
+    """Generate multiple screenshots at fixed intervals."""
+    screenshot_paths = []
+
+    for i in range(num_screenshots):
+        timestamp = i * 10  # Take a screenshot every 10 seconds
+        screenshot_filename = f"{os.path.splitext(os.path.basename(video_path))[0]}_screenshot_{i+1}.jpg"
+        screenshot_path = os.path.join(Config.DOWNLOAD_DIR, screenshot_filename)
+
+        command = [
+            'ffmpeg', '-hide_banner', '-ss', str(timestamp), '-i', video_path,
+            '-frames:v', '1', '-q:v', '2', '-y', screenshot_path
+        ]
+
+        process = await asyncio.create_subprocess_exec(
+            *command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await process.communicate()
+
+        if process.returncode == 0 and os.path.exists(screenshot_path):
+            screenshot_paths.append(screenshot_path)
+        else:
+            print(f"⚠️ Screenshot {i+1} failed: {stderr.decode()}")
+
+    return screenshot_paths
+
+async def send_screenshots(msg, screenshots):
+    """Send screenshots as a media group (album)."""
+    if screenshots:
+        media = [InputMediaPhoto(photo) for photo in screenshots]
+        await msg.reply_media_group(media)
 
 async def softmux_vid(vid_filename, sub_filename, msg):
     start = time.time()
@@ -66,10 +100,14 @@ async def softmux_vid(vid_filename, sub_filename, msg):
     )
 
     error_output = await read_stderr(start, msg, process)
-    await process.wait()  # 🔥 WAIT FOR PROCESS TO COMPLETE
+    await process.wait()
 
     if process.returncode == 0:
         await safe_edit_message(msg, f'✅ **Muxing Completed!**\n⏳ Time: {round(time.time() - start)}s')
+
+        screenshots = await generate_screenshots(out_location)
+        await send_screenshots(msg, screenshots)
+
         return output
     else:
         await safe_edit_message(msg, f'❌ **Muxing Failed!**\n\nError:\n```{error_output}```')
@@ -82,16 +120,13 @@ async def hardmux_vid(vid_filename, sub_filename, msg):
     output = f"{os.path.splitext(vid_filename)[0]}_hardmuxed.mp4"
     out_location = os.path.join(Config.DOWNLOAD_DIR, output)
 
-    # ✅ Check Font Path
     font_path = os.path.join(os.getcwd(), "fonts", "HelveticaRounded-Bold.ttf")
     if not os.path.exists(font_path):
         await safe_edit_message(msg, "❌ Font not found! Place 'HelveticaRounded-Bold.ttf' in 'fonts' folder.")
         return False
 
-    # ✅ Format Subtitle Path
     formatted_sub = "'{}'".format(sub.replace(":", "\\:")) if " " in sub else sub.replace(":", "\\:")
     
-    # ✅ FFmpeg Command
     command = [
         'ffmpeg', '-hide_banner', '-i', vid,
         '-vf', (
@@ -100,7 +135,7 @@ async def hardmux_vid(vid_filename, sub_filename, msg):
             f"PrimaryColour={Config.FONT_COLOR},Outline={Config.BORDER_WIDTH}',"
             f"drawtext=text='{Config.WATERMARK}':fontfile='{font_path}':"
             "x=w-tw-10:y=10:fontsize=24:fontcolor=white:"
-            "box=1:boxcolor=black@0.5"
+            "borderw=2:bordercolor=black"
         ),
         '-c:v', 'libx265', '-preset', 'ultrafast', '-crf', '20',
         '-tag:v', 'hvc1', '-c:a', 'copy', '-y', out_location
@@ -111,10 +146,14 @@ async def hardmux_vid(vid_filename, sub_filename, msg):
     )
 
     error_output = await read_stderr(start, msg, process)
-    await process.wait()  # 🔥 WAIT FOR PROCESS TO COMPLETE
+    await process.wait()
 
     if process.returncode == 0:
         await safe_edit_message(msg, f'✅ **Muxing Completed!**\n⏳ Time: {round(time.time() - start)}s')
+
+        screenshots = await generate_screenshots(out_location)
+        await send_screenshots(msg, screenshots)
+
         return output
     else:
         trimmed_error = error_output[-3000:] if len(error_output) > 3000 else error_output
