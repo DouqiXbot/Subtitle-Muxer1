@@ -33,7 +33,7 @@ async def softmux(client, message):
 
     sent_msg = await client.send_message(chat_id, 'Your File is Being Soft Subbed. This should be done in a few seconds!')
 
-    softmux_filename = await softmux_vid(og_vid_filename, og_sub_filename, sent_msg)
+    softmux_filename = await softmux_vid(og_vid_filename, og_sub_filename, sent_msg, message)
     if not softmux_filename:
         return
 
@@ -85,7 +85,8 @@ async def hardmux(client, message):
 
     sent_msg = await client.send_message(chat_id, 'Your File is Being Hard Subbed. This might take a long time!')
 
-    hardmux_filename = await hardmux_vid(og_vid_filename, og_sub_filename, sent_msg)
+    # Added message as argument here
+    hardmux_filename = await hardmux_vid(og_vid_filename, og_sub_filename, sent_msg, message)
     if not hardmux_filename:
         return
     
