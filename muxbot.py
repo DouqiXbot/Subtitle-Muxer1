@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 import os
 from config import Config
 from helper_func.dbhelper import Database as Db
-from helper_func import callback_handler  # Import callback handler
+from helper_func.callback_handler import callback_handler  # Import callback handler
 
 db = Db().setup()
 
