@@ -1,7 +1,7 @@
 from pyrogram import Client
 from pyrogram.types import CallbackQuery
 from helper_func.dbhelper import Database as Db
-from muxxer import softmux, hardmux  # Import softmux & hardmux from muxxer.py
+from plugins.muxer import softmux_vid as softmux, hardmux_vid as hardmux  # Import softmux & hardmux from muxxer.py
 
 db = Db()
 
