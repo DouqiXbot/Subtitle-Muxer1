@@ -21,8 +21,8 @@ async def hardmux_vid(vid_filename: str, sub_filename: str, msg, user_settings: 
         await safe_edit_message(msg, "❌ Font not found! Please add 'HelveticaRounded-Bold.ttf' in 'fonts' folder.")
         return None
 
-    sub_path = sub.as_posix().replace(":", "\\:")
-    formatted_sub = f"'{sub_path}'" if " " in sub.name else sub_path
+    # Ensure the subtitle path is properly quoted
+    formatted_sub = f'"{sub.as_posix()}"'  # Always use double quotes
 
     # ✅ Resolution Fix (Only 480p, 720p, 1080p allowed)
     resolution_map = {
@@ -33,7 +33,7 @@ async def hardmux_vid(vid_filename: str, sub_filename: str, msg, user_settings: 
     
     # Get resolution from user settings or default to 720p
     resolution = user_settings.get("resolution", "1280x720")
-    scale_filter = f"{resolution_map.get(resolution, 'scale=1280:720')},"  # Default to 720p
+    scale_filter = resolution_map.get(resolution, "scale=1280:720")  # Default to 720p
 
     # ✅ Set default values to prevent KeyError
     crf = user_settings.get("crf", "22")
@@ -44,8 +44,7 @@ async def hardmux_vid(vid_filename: str, sub_filename: str, msg, user_settings: 
     command = [
         "ffmpeg", "-hide_banner", "-i", str(vid),
         "-vf", (
-            f"{scale_filter}"
-            f"subtitles={formatted_sub}:force_style="
+            f"{scale_filter},subtitles={formatted_sub}:force_style="
             f"'FontName=HelveticaRounded-Bold,FontSize={font_size},"
             f"PrimaryColour={Config.FONT_COLOR},Outline={Config.BORDER_WIDTH}',"
             f"drawtext=text='{Config.WATERMARK}':fontfile='{font_path}':"
