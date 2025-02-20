@@ -12,7 +12,7 @@ ENCODING_OPTIONS = {
     "preset": ["medium", "fast", "veryfast", "ultrafast"],
     "codec": ["libx265", "libx264"],
     "font_size": ["18", "20", "24", "28"],
-    "resolution": ["1280x720", "1920x1080", "Original"]
+    "resolution": ["480p", "720p", "1080p"]
 }
 
 # 🔹 User settings storage
@@ -20,7 +20,7 @@ user_settings = {}
 
 async def get_settings_keyboard(user_id: int) -> InlineKeyboardMarkup:
     """Generate dynamic encoding settings keyboard."""
-    default_settings = {"crf": "23", "preset": "ultrafast", "codec": "libx264", "font_size": "20", "resolution": "Original"}
+    default_settings = {"crf": "22", "preset": "fast", "codec": "libx264", "font_size": "20", "resolution": "720p"}
     current_settings = user_settings.get(user_id, default_settings)
 
     return InlineKeyboardMarkup([
@@ -81,13 +81,33 @@ async def start_encoding_process(client, query):
     """Start the encoding process when the user presses 'Start Encoding'."""
     user_id = query.from_user.id
     chat_id = query.message.chat.id
-    user_settings[user_id] = user_settings.get(user_id, {})
+    user_settings[user_id] = user_settings.get(user_id, {
+        "crf": "22",
+        "preset": "fast",
+        "codec": "libx264",
+        "font_size": "20",
+        "resolution": "720p"
+    })
+
+    # 🔹 Check if user uploaded files
+    video_file = None
+    subtitle_file = None
+
+    async for message in client.get_chat_history(chat_id, limit=10):
+        if message.video or message.document:
+            video_file = message.video.file_name if message.video else message.document.file_name
+        if message.document and message.document.file_name.endswith((".srt", ".ass")):
+            subtitle_file = message.document.file_name
+
+    if not video_file or not subtitle_file:
+        await query.message.edit_text("❌ Please upload a video and subtitle file first!")
+        return
 
     sent_msg = await query.message.edit_text("⚙️ Preparing encoding process...")
 
     try:
         # 🔹 Call Hardmux Function
-        output_filename = await hardmux_vid("video.mp4", "subtitles.srt", sent_msg, user_settings)
+        output_filename = await hardmux_vid(video_file, subtitle_file, sent_msg, user_settings)
 
         if output_filename:
             await client.send_document(chat_id, document=output_filename, caption="✅ Encoding Completed!")
