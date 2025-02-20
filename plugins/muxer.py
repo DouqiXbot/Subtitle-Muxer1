@@ -84,18 +84,28 @@ async def read_stderr(start: float, msg, process) -> str:
 # Encoding options
 ENCODING_OPTIONS = {
     "crf": ["18 (Quality)", "20 (Balanced)", "22 (Compression)"],
-    "preset": ["ultrafast", "superfast", "veryfast", "faster"],
-    "codec": ["libx265", "libx264", "libvpx-vp9"],
-    "font_size": ["18", "24", "30", "36"],
+    "preset": ["medium", "fast", "veryfast", "ultrafast"],
+    "codec": ["libx265", "libx264"],
+    "font_size": ["18", "20", "24", "28"],
     "resolution": ["1280x720", "1920x1080", "Original"]
 }
 
 async def get_settings_keyboard(user_id: int) -> InlineKeyboardMarkup:
-    """Generate the encoding settings keyboard."""
-    current_settings = db.get_encoding_settings(user_id) or {
-        "crf": "20", "preset": "superfast", "codec": "libx265",
-        "font_size": "24", "resolution": "Original"
+    """Generate the encoding settings keyboard with default values if settings are missing."""
+    default_settings = {
+        "crf": "20",
+        "preset": "superfast",
+        "codec": "libx265",
+        "font_size": "24",
+        "resolution": "Original"
     }
+    
+    current_settings = db.get_encoding_settings(user_id) or {}
+    logger.debug(f"Current settings for user {user_id}: {current_settings}")
+    
+    # Ensure all required keys are present
+    current_settings = {**default_settings, **current_settings}
+    
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(f"CRF: {current_settings['crf'].split()[0]}", callback_data="setting_crf")],
         [
