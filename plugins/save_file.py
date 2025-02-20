@@ -28,6 +28,13 @@ async def _check_user(_, __, m):
 
 check_user = filters.create(_check_user)
 
+class Chat:
+    DOWNLOAD_SUCCESS = "✅ File downloaded successfully in {} seconds!"
+    UNSUPPORTED_FORMAT = "❌ Unsupported file format: `{}`"
+    FILE_SIZE_ERROR = "❌ Couldn't determine the file size."
+    MAX_FILE_SIZE = "❌ File size exceeds the 2GB limit."
+    LONG_CUS_FILENAME = "❌ Filename too long! Keep it under 60 characters."
+
 async def safe_edit_message(message, new_text):
     """Safe edit function to avoid duplicate messages."""
     try:
