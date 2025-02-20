@@ -23,7 +23,15 @@ async def hardmux_vid(vid_filename: str, sub_filename: str, msg, user_settings: 
 
     sub_path = sub.as_posix().replace(":", "\\:")
     formatted_sub = f"'{sub_path}'" if " " in sub.name else sub_path
-    scale_filter = f"scale={user_settings['resolution']}," if user_settings["resolution"] != "Original" else ""
+
+    # ✅ Resolution Fix (Only 480p, 720p, 1080p allowed)
+    resolution_map = {
+        "480p": "scale=854:480",
+        "720p": "scale=1280:720",
+        "1080p": "scale=1920:1080"
+    }
+    resolution = user_settings.get("resolution", "720p")
+    scale_filter = f"{resolution_map.get(resolution, 'scale=1280:720')},"  # Default: 720p
 
     command = [
         "ffmpeg", "-hide_banner", "-i", str(vid),
