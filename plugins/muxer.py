@@ -116,7 +116,7 @@ async def get_settings_keyboard(user_id: int) -> InlineKeyboardMarkup:
             InlineKeyboardButton(f"Font: {current_settings['font_size']}pt", callback_data="setting_font_size"),
             InlineKeyboardButton(f"Res: {current_settings['resolution']}", callback_data="setting_resolution")
         ],
-        [InlineKeyboardButton("🚀 Start Encoding", callback_data="start_encoding")]
+        [InlineKeyboardButton("🚀 Start Encoding", callback_data="burn")]
     ])
 
 @Client.on_callback_query(filters.regex(r"^setting_(.+)$"))
@@ -180,7 +180,7 @@ async def hardmux(client, message):
     keyboard = await get_settings_keyboard(chat_id)
     await message.reply_text("⚙️ Configure encoding parameters:", reply_markup=keyboard)
 
-@Client.on_callback_query(filters.regex("start_encoding"))
+@Client.on_callback_query(filters.regex("burn"))
 async def start_encoding_process(client, query):
     """Start the video encoding process when the user presses 'Start Encoding'."""
     user_id = query.from_user.id
