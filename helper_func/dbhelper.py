@@ -44,23 +44,18 @@ class Database:
             logger.error(f"Error setting up database: {e}")
             raise
 
-    def _execute_query(self, query: str, params: tuple = ()) -> Optional[sqlite3.Row]:
-        """
-        Execute a query and return the first result.
-        
-        Args:
-            query (str): SQL query to execute.
-            params (tuple): Parameters to prevent SQL injection.
-        
-        Returns:
-            Optional[sqlite3.Row]: Result row or None if no result.
-        """
-        try:
-            cursor = self.conn.execute(query, params)
-            return cursor.fetchone()
-        except sqlite3.Error as e:
-            logger.error(f"Query error: {e}")
-            return None
+def _execute_query(self, query: str, params: tuple = ()) -> Optional[sqlite3.Row]:
+    """
+    Execute a query and return the first result.
+    """
+    try:
+        cursor = self.conn.execute(query, params)
+        result = cursor.fetchone()
+        cursor.close()  # Ensure cursor is closed properly
+        return result
+    except sqlite3.Error as e:
+        logger.error(f"Query error: {e}")
+        return None
 
     def put_video(self, user_id: int, vid_name: str, filename: str) -> bool:
         """
@@ -92,23 +87,22 @@ class Database:
             return False
 
     def put_sub(self, user_id: int, sub_name: str) -> bool:
-        """Store or update subtitle filename for a user."""
-        res = self._execute_query("SELECT * FROM muxbot WHERE user_id = ?", (user_id,))
-        if res:
-            query = "UPDATE muxbot SET sub_name = ? WHERE user_id = ?"
-            params = (sub_name, user_id)
-        else:
-            query = "INSERT INTO muxbot (user_id, sub_name) VALUES (?, ?)"
-            params = (user_id, sub_name)
-        
-        try:
-            self.conn.execute(query, params)
-            self.conn.commit()
-            logger.info(f"Stored subtitle for user {user_id}: {sub_name}")
-            return True
-        except sqlite3.Error as e:
-            logger.error(f"Error storing subtitle for user {user_id}: {e}")
-            return False
+    res = self._execute_query("SELECT * FROM muxbot WHERE user_id = ?", (user_id,))
+    if res:
+        query = "UPDATE muxbot SET sub_name = ? WHERE user_id = ?"
+        params = (sub_name, user_id)
+    else:
+        query = "INSERT INTO muxbot (user_id, sub_name, vid_name, filename, encoding_settings) VALUES (?, ?, '', '', '')"
+        params = (user_id, sub_name)
+    
+    try:
+        self.conn.execute(query, params)
+        self.conn.commit()
+        logger.info(f"Stored subtitle for user {user_id}: {sub_name}")
+        return True
+    except sqlite3.Error as e:
+        logger.error(f"Error storing subtitle for user {user_id}: {e}")
+        return False
 
     def check_sub(self, user_id: int) -> bool:
         """Check if a subtitle file exists for the user."""
@@ -121,9 +115,8 @@ class Database:
         return bool(res and res["vid_name"])
 
     def get_vid_filename(self, user_id: int) -> Optional[str]:
-        """Get the video filename for a user."""
-        res = self._execute_query("SELECT vid_name FROM muxbot WHERE user_id = ?", (user_id,))
-        return res["vid_name"] if res else None
+    res = self._execute_query("SELECT vid_name FROM muxbot WHERE user_id = ?", (user_id,))
+    return res["vid_name"] if res and "vid_name" in res else None
 
     def get_sub_filename(self, user_id: int) -> Optional[str]:
         """Get the subtitle filename for a user."""
@@ -190,11 +183,13 @@ class Database:
 
 if __name__ == "__main__":
     # Example usage
-    db = Database()
-    db.put_video(123, "video.mp4", "output.mp4")
-    db.put_sub(123, "subs.srt")
-    db.set_encoding_settings(123, {"crf": "20", "preset": "superfast", "codec": "libx265", "font_size": "24", "resolution": "Original"})
-    print(db.get_vid_filename(123))  # Output: video.mp4
-    print(db.get_encoding_settings(123))  # Output: {'crf': '20', 'preset': 'superfast', 'codec': 'libx265', 'font_size': '24', 'resolution': 'Original'}
-    db.erase(123)
-    db.close()
+db = Database()
+db.put_video(123, "test.mp4", "output.mp4")
+db.put_sub(123, "test.srt")
+print(db.get_vid_filename(123))  # Expected: "test.mp4"
+print(db.get_sub_filename(123))  # Expected: "test.srt"
+print(db.get_encoding_settings(123))  # Expected: None (since not set yet)
+db.set_encoding_settings(123, {"crf": "23", "preset": "ultrafast"})
+print(db.get_encoding_settings(123))  # Expected: {'crf': '20', 'preset': 'slow'}
+db.erase(123)
+db.close()
