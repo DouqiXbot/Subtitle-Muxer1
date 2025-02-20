@@ -8,11 +8,20 @@ logger = logging.getLogger(__name__)
 
 # 🔹 Encoding Options
 ENCODING_OPTIONS = {
-    "crf": ["18", "20", "22"],
+    "crf": ["18", "20", "23"],
     "preset": ["medium", "fast", "veryfast", "ultrafast"],
     "codec": ["libx265", "libx264"],
     "font_size": ["18", "20", "24", "28"],
-    "resolution": ["480p", "720p", "1080p"]
+    "resolution": ["854x480", "1280x720", "1920x1080"]  # Removed "Original"
+}
+
+# 🔹 Default Encoding Settings
+DEFAULT_SETTINGS = {
+    "crf": "22",
+    "preset": "fast",
+    "codec": "libx264",
+    "font_size": "20",
+    "resolution": "1280x720"  # Default to 720p
 }
 
 # 🔹 User settings storage
@@ -20,8 +29,15 @@ user_settings = {}
 
 async def get_settings_keyboard(user_id: int) -> InlineKeyboardMarkup:
     """Generate dynamic encoding settings keyboard."""
-    default_settings = {"crf": "22", "preset": "fast", "codec": "libx264", "font_size": "20", "resolution": "720p"}
-    current_settings = user_settings.get(user_id, default_settings)
+    # Ensure user settings exist
+    if user_id not in user_settings:
+        user_settings[user_id] = DEFAULT_SETTINGS.copy()
+    else:
+        # Merge missing keys with default values
+        for key, value in DEFAULT_SETTINGS.items():
+            user_settings[user_id].setdefault(key, value)
+
+    current_settings = user_settings[user_id]
 
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(f"CRF: {current_settings['crf']}", callback_data="setting_crf")],
@@ -48,7 +64,12 @@ async def encoding_settings_callback(client, query):
     """Display available encoding options when user clicks a setting."""
     setting_type = query.matches[0].group(1)
     user_id = query.from_user.id
-    current_settings = user_settings.get(user_id, {})
+
+    # Ensure user settings exist
+    if user_id not in user_settings:
+        user_settings[user_id] = DEFAULT_SETTINGS.copy()
+
+    current_settings = user_settings[user_id]
 
     buttons = [
         InlineKeyboardButton(
@@ -68,11 +89,14 @@ async def set_encoding_parameter(client, query):
     """Save selected encoding setting and return to menu."""
     setting_type, value = query.matches[0].groups()
     user_id = query.from_user.id
+
+    # Ensure user_settings[user_id] exists
     if user_id not in user_settings:
-        user_settings[user_id] = {}
+        user_settings[user_id] = DEFAULT_SETTINGS.copy()
+
     user_settings[user_id][setting_type] = value
 
-    await query.answer(f"{setting_type.title()} set to {value}!")
+    await query.answer(f"{setting_type.replace('_', ' ').title()} set to {value}!")
     keyboard = await get_settings_keyboard(user_id)
     await query.message.edit_text("⚙️ Configure encoding parameters:", reply_markup=keyboard)
 
@@ -81,33 +105,15 @@ async def start_encoding_process(client, query):
     """Start the encoding process when the user presses 'Start Encoding'."""
     user_id = query.from_user.id
     chat_id = query.message.chat.id
-    user_settings[user_id] = user_settings.get(user_id, {
-        "crf": "22",
-        "preset": "fast",
-        "codec": "libx264",
-        "font_size": "20",
-        "resolution": "720p"
-    })
 
-    # 🔹 Check if user uploaded files
-    video_file = None
-    subtitle_file = None
-
-    async for message in client.get_chat_history(chat_id, limit=10):
-        if message.video or message.document:
-            video_file = message.video.file_name if message.video else message.document.file_name
-        if message.document and message.document.file_name.endswith((".srt", ".ass")):
-            subtitle_file = message.document.file_name
-
-    if not video_file or not subtitle_file:
-        await query.message.edit_text("❌ Please upload a video and subtitle file first!")
-        return
+    # Ensure user settings exist
+    user_settings[user_id] = user_settings.get(user_id, DEFAULT_SETTINGS.copy())
 
     sent_msg = await query.message.edit_text("⚙️ Preparing encoding process...")
 
     try:
         # 🔹 Call Hardmux Function
-        output_filename = await hardmux_vid(video_file, subtitle_file, sent_msg, user_settings)
+        output_filename = await hardmux_vid("video.mp4", "subtitles.srt", sent_msg, user_settings[user_id])
 
         if output_filename:
             await client.send_document(chat_id, document=output_filename, caption="✅ Encoding Completed!")
