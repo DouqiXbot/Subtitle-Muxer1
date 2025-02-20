@@ -130,16 +130,32 @@ class Database:
             logger.error(f"Error storing settings: {e}")
             return False
 
-    def get_encoding_settings(self, user_id: int) -> Optional[Dict[str, Any]]:
-        """Get encoding settings for a user."""
+    def get_encoding_settings(self, user_id: int) -> Dict[str, Any]:
+        """Get encoding settings for a user with default values (480p, 720p, 1080p only)."""
         res = self._execute_query("SELECT encoding_settings FROM muxbot WHERE user_id = ?", (user_id,))
+        
+        # Default settings
+        defaults = {
+            "crf": "23",
+            "preset": "ultrafast",
+            "codec": "libx264",  # Default H.264
+            "resolution": "720p",  # Default resolution
+            "font_size": "20"
+        }
+
         if res and res["encoding_settings"]:
             try:
-                return json.loads(res["encoding_settings"])
+                settings = json.loads(res["encoding_settings"])
+                
+                # ✅ Ensure only allowed resolutions (480p, 720p, 1080p)
+                if settings.get("resolution") not in ["480p", "720p", "1080p"]:
+                    settings["resolution"] = "720p"
+
+                return {**defaults, **settings}  # Merge user settings with defaults
             except json.JSONDecodeError as e:
                 logger.error(f"Error decoding settings: {e}")
-                return None
-        return None
+
+        return defaults  # Return default if no settings found
 
     def erase(self, user_id: int) -> bool:
         """Delete all data for a user."""
