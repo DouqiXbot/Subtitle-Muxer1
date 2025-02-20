@@ -194,6 +194,11 @@ async def start_encoding_process(client, query):
     og_sub_filename = db.get_sub_filename(chat_id)
     user_settings = db.get_encoding_settings(user_id) or {}
 
+    # Log retrieved data for debugging
+    logger.debug(f"Retrieved video filename: {og_vid_filename}")
+    logger.debug(f"Retrieved subtitle filename: {og_sub_filename}")
+    logger.debug(f"Retrieved user settings: {user_settings}")
+
     # Validate files and settings
     if not og_vid_filename or not (download_dir / og_vid_filename).exists():
         await query.message.edit_text("❌ Error: Video file not found or not uploaded!")
