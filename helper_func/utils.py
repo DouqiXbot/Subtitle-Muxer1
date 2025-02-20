@@ -23,11 +23,12 @@ async def readlines(stream):
             yield line
         data.extend(await stream.read(1024))
 
-async def safe_edit_message(msg, text: str, retries: int = 1):
-    """Safely edit a message with retry logic."""
+async def safe_edit_message(msg, new_text: str, retries: int = 1):
+    """Safely edit a message with retry logic, avoiding unnecessary edits."""
     for attempt in range(retries + 1):
         try:
-            await msg.edit(text)
+            if msg.text != new_text:  # ✅ Prevents 400 MESSAGE_NOT_MODIFIED error
+                await msg.edit(new_text)
             return
         except Exception as e:
             logger.warning(f"Edit failed: {e}")
@@ -38,20 +39,23 @@ async def safe_edit_message(msg, text: str, retries: int = 1):
                 break
 
 async def read_stderr(start: float, msg, process) -> str:
-    """Read FFmpeg stderr and update progress."""
+    """Read FFmpeg stderr and update progress messages."""
     error_log = []
     last_edit_time = time.time()
+    
     async for line in readlines(process.stderr):
         line_str = line.decode('utf-8', errors='ignore')
         error_log.append(line_str)
         progress = parse_progress(line_str)
-        if progress and (time.time() - last_edit_time >= 10):
+        
+        if progress and (time.time() - last_edit_time >= 10):  # ✅ Updates every 10 seconds
             text = (
                 "🔄 **Processing...**\n"
-                f"Size: {progress.get('size', 'N/A')}\n"
-                f"Time: {progress.get('time', 'N/A')}\n"
-                f"Speed: {progress.get('speed', 'N/A')}"
+                f"📦 Size: `{progress.get('size', 'N/A')}`\n"
+                f"⏳ Time: `{progress.get('time', 'N/A')}`\n"
+                f"⚡ Speed: `{progress.get('speed', 'N/A')}`"
             )
             await safe_edit_message(msg, text)
             last_edit_time = time.time()
+    
     return "\n".join(error_log)
