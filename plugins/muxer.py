@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from helper_func.ffmpeg import hardmux_vid  # Import FFmpeg muxing function
@@ -103,23 +104,59 @@ async def set_encoding_parameter(client, query):
 @Client.on_callback_query(filters.regex("burn"))
 async def start_encoding_process(client, query):
     """Start the encoding process when the user presses 'Start Encoding'."""
-    user_id = query.from_user.id
-    chat_id = query.message.chat.id
+    chat_id = query.from_user.id
 
-    # Ensure user settings exist
-    user_settings[user_id] = user_settings.get(user_id, DEFAULT_SETTINGS.copy())
+    # 🔹 Fetch stored filenames
+    og_vid_filename = db.get_vid_filename(chat_id)
+    og_sub_filename = db.get_sub_filename(chat_id)
 
+    # 🔹 Validation Checks
+    text = ''
+    if not og_vid_filename or not os.path.exists(os.path.join(Config.DOWNLOAD_DIR, og_vid_filename)):
+        text += "First send a Video File\n"
+    if not og_sub_filename or not os.path.exists(os.path.join(Config.DOWNLOAD_DIR, og_sub_filename)):
+        text += "Send a Subtitle File!"
+
+    if text:
+        await client.send_message(chat_id, text)
+        return
+
+    # 🔹 Initial message update
     sent_msg = await query.message.edit_text("⚙️ Preparing encoding process...")
 
+    # 🔹 Wait for 10-15 seconds before starting encoding
+    await asyncio.sleep(15)
+
+    # 🔹 Start Hardmuxing
+    hardmux_filename = await hardmux_vid(og_vid_filename, og_sub_filename, sent_msg, user_settings.get(chat_id, DEFAULT_SETTINGS))
+
+    if not hardmux_filename:
+        await sent_msg.edit_text("❌ Encoding Failed!")
+        return
+
+    # 🔹 Rename the output file
+    final_filename = db.get_filename(chat_id)
+    os.rename(os.path.join(Config.DOWNLOAD_DIR, hardmux_filename), os.path.join(Config.DOWNLOAD_DIR, final_filename))
+
+    # 🔹 Upload the final file
+    start_time = time.time()
     try:
-        # 🔹 Call Hardmux Function
-        output_filename = await hardmux_vid("video.mp4", "subtitles.srt", sent_msg, user_settings[user_id])
-
-        if output_filename:
-            await client.send_document(chat_id, document=output_filename, caption="✅ Encoding Completed!")
-        else:
-            await sent_msg.edit_text("❌ Encoding Failed!")
-
+        await client.send_document(
+            chat_id,
+            progress=progress_bar,
+            progress_args=('Uploading your File!', sent_msg, start_time),
+            document=os.path.join(Config.DOWNLOAD_DIR, final_filename),
+            caption=final_filename
+        )
+        await sent_msg.edit_text(f"✅ File Successfully Uploaded!\n⏳ Total Time: {round(time.time() - start_time)} seconds")
     except Exception as e:
-        logger.error(f"❌ Encoding failed: {e}")
-        await sent_msg.edit_text(f"❌ An error occurred:\n`{str(e)}`")
+        print(e)
+        await client.send_message(chat_id, "❌ An error occurred while uploading the file!\nCheck logs for details.")
+
+    # 🔹 Cleanup downloaded files
+    path = Config.DOWNLOAD_DIR + '/'
+    for file in [og_sub_filename, og_vid_filename, final_filename]:
+        if file and os.path.exists(path + file):
+            os.remove(path + file)
+
+    db.erase(chat_id)
