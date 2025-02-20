@@ -1,5 +1,16 @@
 import sqlite3
 from typing import Optional, Dict, Any
+import json
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler()]
+)
+
+logger = logging.getLogger(__name__)
 
 class Database:
     """A SQLite database handler for managing muxbot user data."""
@@ -30,7 +41,8 @@ class Database:
             self.conn.execute(cmd)
             self.conn.commit()
         except sqlite3.Error as e:
-            print(f"Error setting up database: {e}")
+            logger.error(f"Error setting up database: {e}")
+            raise
 
     def _execute_query(self, query: str, params: tuple = ()) -> Optional[sqlite3.Row]:
         """
@@ -47,12 +59,12 @@ class Database:
             cursor = self.conn.execute(query, params)
             return cursor.fetchone()
         except sqlite3.Error as e:
-            print(f"Query error: {e}")
+            logger.error(f"Query error: {e}")
             return None
 
     def put_video(self, user_id: int, vid_name: str, filename: str) -> bool:
         """
-        Store or update video filename for a user.
+        Store or update video filename and output filename for a user.
         
         Args:
             user_id (int): User's Telegram ID.
@@ -73,9 +85,10 @@ class Database:
         try:
             self.conn.execute(query, params)
             self.conn.commit()
+            logger.info(f"Stored video for user {user_id}: {vid_name}, {filename}")
             return True
         except sqlite3.Error as e:
-            print(f"Error storing video: {e}")
+            logger.error(f"Error storing video for user {user_id}: {e}")
             return False
 
     def put_sub(self, user_id: int, sub_name: str) -> bool:
@@ -91,9 +104,10 @@ class Database:
         try:
             self.conn.execute(query, params)
             self.conn.commit()
+            logger.info(f"Stored subtitle for user {user_id}: {sub_name}")
             return True
         except sqlite3.Error as e:
-            print(f"Error storing subtitle: {e}")
+            logger.error(f"Error storing subtitle for user {user_id}: {e}")
             return False
 
     def check_sub(self, user_id: int) -> bool:
@@ -123,7 +137,6 @@ class Database:
 
     def set_encoding_settings(self, user_id: int, settings: Dict[str, Any]) -> bool:
         """Store encoding settings for a user as a JSON string."""
-        import json
         settings_str = json.dumps(settings)
         res = self._execute_query("SELECT * FROM muxbot WHERE user_id = ?", (user_id,))
         if res:
@@ -136,17 +149,24 @@ class Database:
         try:
             self.conn.execute(query, params)
             self.conn.commit()
+            logger.info(f"Stored encoding settings for user {user_id}: {settings}")
             return True
         except sqlite3.Error as e:
-            print(f"Error storing settings: {e}")
+            logger.error(f"Error storing settings for user {user_id}: {e}")
             return False
 
     def get_encoding_settings(self, user_id: int) -> Optional[Dict[str, Any]]:
         """Get encoding settings for a user."""
-        import json
         res = self._execute_query("SELECT encoding_settings FROM muxbot WHERE user_id = ?", (user_id,))
         if res and res["encoding_settings"]:
-            return json.loads(res["encoding_settings"])
+            try:
+                settings = json.loads(res["encoding_settings"])
+                logger.debug(f"Retrieved settings for user {user_id}: {settings}")
+                return settings
+            except json.JSONDecodeError as e:
+                logger.error(f"Error decoding settings for user {user_id}: {e}")
+                return None
+        logger.debug(f"No settings found for user {user_id}")
         return None
 
     def erase(self, user_id: int) -> bool:
@@ -154,22 +174,27 @@ class Database:
         try:
             self.conn.execute("DELETE FROM muxbot WHERE user_id = ?", (user_id,))
             self.conn.commit()
+            logger.info(f"Erased data for user {user_id}")
             return True
         except sqlite3.Error as e:
-            print(f"Error erasing data: {e}")
+            logger.error(f"Error erasing data for user {user_id}: {e}")
             return False
 
     def close(self) -> None:
         """Close the database connection."""
-        self.conn.close()
+        try:
+            self.conn.close()
+            logger.info("Database connection closed")
+        except sqlite3.Error as e:
+            logger.error(f"Error closing database connection: {e}")
 
 if __name__ == "__main__":
     # Example usage
     db = Database()
     db.put_video(123, "video.mp4", "output.mp4")
     db.put_sub(123, "subs.srt")
-    db.set_encoding_settings(123, {"crf": "20", "preset": "superfast"})
+    db.set_encoding_settings(123, {"crf": "20", "preset": "superfast", "codec": "libx265", "font_size": "24", "resolution": "Original"})
     print(db.get_vid_filename(123))  # Output: video.mp4
-    print(db.get_encoding_settings(123))  # Output: {'crf': '20', 'preset': 'superfast'}
+    print(db.get_encoding_settings(123))  # Output: {'crf': '20', 'preset': 'superfast', 'codec': 'libx265', 'font_size': '24', 'resolution': 'Original'}
     db.erase(123)
     db.close()
