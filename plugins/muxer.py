@@ -93,10 +93,10 @@ ENCODING_OPTIONS = {
 async def get_settings_keyboard(user_id: int) -> InlineKeyboardMarkup:
     """Generate the encoding settings keyboard with default values if settings are missing."""
     default_settings = {
-        "crf": "20",
-        "preset": "superfast",
-        "codec": "libx265",
-        "font_size": "24",
+        "crf": "23",
+        "preset": "ultrafast",
+        "codec": "libx264",
+        "font_size": "20",
         "resolution": "Original"
     }
     
@@ -182,56 +182,50 @@ async def hardmux(client, message):
 
 @Client.on_callback_query(filters.regex("start_encoding"))
 async def start_encoding_process(client, query):
-    """Start the video encoding process."""
+    """Start the video encoding process when the user presses 'Start Encoding'."""
     user_id = query.from_user.id
     chat_id = query.message.chat.id
     download_dir = Path(Config.DOWNLOAD_DIR)
 
-    logger.info(f"Starting encoding process for user {user_id}")
+    logger.info(f"🔄 Starting encoding process for user {user_id}")
 
-    # Retrieve files and settings from database
+    # Retrieve required files and user settings
     og_vid_filename = db.get_vid_filename(chat_id)
     og_sub_filename = db.get_sub_filename(chat_id)
     user_settings = db.get_encoding_settings(user_id) or {}
 
-    # Log retrieved data for debugging
-    logger.debug(f"Retrieved video filename: {og_vid_filename}")
-    logger.debug(f"Retrieved subtitle filename: {og_sub_filename}")
-    logger.debug(f"Retrieved user settings: {user_settings}")
-
-    # Validate files and settings
+    # Validate required files
+    missing_files = []
     if not og_vid_filename or not (download_dir / og_vid_filename).exists():
-        await query.message.edit_text("❌ Error: Video file not found or not uploaded!")
-        logger.error(f"Video file not found for user {user_id}: {og_vid_filename}")
-        return
-
+        missing_files.append("❌ Video file is missing! Please upload it first.")
     if not og_sub_filename or not (download_dir / og_sub_filename).exists():
-        await query.message.edit_text("❌ Error: Subtitle file not found or not uploaded!")
-        logger.error(f"Subtitle file not found for user {user_id}: {og_sub_filename}")
+        missing_files.append("❌ Subtitle file is missing! Please upload it first.")
+
+    if missing_files:
+        await query.message.edit_text("\n".join(missing_files))
+        logger.error(f"Encoding aborted due to missing files: {missing_files}")
         return
 
-    # Ensure all required settings are present
+    # Ensure all required encoding settings are present
     default_settings = {
-        "crf": "20",
-        "preset": "superfast",
-        "codec": "libx265",
-        "font_size": "24",
+        "crf": "23",
+        "preset": "ultrafast",
+        "codec": "libx264",
+        "font_size": "20",
         "resolution": "Original"
     }
     user_settings = {**default_settings, **user_settings}
 
-    sent_msg = await query.message.edit_text("📀 Preparing encoding process...")
+    sent_msg = await query.message.edit_text("⚙️ Preparing encoding process...")
 
     try:
         hardmux_filename = await hardmux_vid(og_vid_filename, og_sub_filename, sent_msg, user_settings)
         if not hardmux_filename:
-            await sent_msg.edit_text("❌ Encoding failed. Check logs for details.")
+            await sent_msg.edit_text("❌ Encoding failed. Please check logs for details.")
             return
 
-        final_filename = db.get_filename(chat_id)
-        if not final_filename:
-            final_filename = f"{os.path.splitext(og_vid_filename)[0]}_hardmuxed.mp4"
-            db.put_video(chat_id, og_vid_filename, final_filename)  # Ensure filename is stored
+        final_filename = db.get_filename(chat_id) or f"{Path(og_vid_filename).stem}_hardmuxed.mp4"
+        db.put_video(chat_id, og_vid_filename, final_filename)
 
         input_path = download_dir / hardmux_filename
         output_path = download_dir / final_filename
@@ -241,28 +235,29 @@ async def start_encoding_process(client, query):
         await client.send_document(
             chat_id,
             document=str(output_path),
-            caption=final_filename,
+            caption=f"✅ **Encoding Completed!**\n📄 Filename: `{final_filename}`",
             progress=progress_bar,
             progress_args=("Uploading your File!", sent_msg, start_time)
         )
-        await sent_msg.edit_text(f"✅ File Uploaded!\n⏳ Time: {round(time.time() - start_time)}s")
+        await sent_msg.edit_text(f"✅ **File Uploaded!**\n⏳ Time: `{round(time.time() - start_time)}s`")
 
     except Exception as e:
-        logger.error(f"Encoding or upload failed for user {user_id}: {e}")
-        await sent_msg.edit_text(f"❌ An error occurred during encoding/upload: {str(e)}")
-        return
+        logger.error(f"❌ Encoding or upload failed for user {user_id}: {e}")
+        await sent_msg.edit_text(f"❌ An error occurred during encoding/upload:\n`{str(e)}`")
 
-    # Cleanup
-    for file in [og_sub_filename, og_vid_filename, final_filename]:
-        if file and (download_dir / file).exists():
+    # Cleanup files after processing
+    cleanup_files = [og_sub_filename, og_vid_filename, final_filename]
+    for file in cleanup_files:
+        file_path = download_dir / file
+        if file and file_path.exists():
             try:
-                (download_dir / file).unlink()
-                logger.info(f"Cleaned up file: {file}")
+                file_path.unlink()
+                logger.info(f"🧹 Deleted file: {file}")
             except OSError as e:
-                logger.warning(f"Failed to delete {file}: {e}")
+                logger.warning(f"⚠️ Failed to delete {file}: {e}")
 
     db.erase(chat_id)
-    logger.info(f"Completed encoding and cleanup for user {user_id}")
+    logger.info(f"✅ Encoding process completed for user {user_id}.")
 
 async def hardmux_vid(vid_filename: str, sub_filename: str, msg, user_settings: Dict) -> Optional[str]:
     """Hardmux video with subtitles using FFmpeg."""
@@ -270,19 +265,20 @@ async def hardmux_vid(vid_filename: str, sub_filename: str, msg, user_settings: 
     download_dir = Path(Config.DOWNLOAD_DIR)
     vid = download_dir / vid_filename
     sub = download_dir / sub_filename
-    output = f"{os.path.splitext(vid_filename)[0]}_hardmuxed.mp4"
+    output = f"{Path(vid_filename).stem}_hardmuxed.mp4"
     out_location = download_dir / output
 
+    # Ensure font file exists
     font_path = Path.cwd() / "fonts" / "HelveticaRounded-Bold.ttf"
     if not font_path.exists():
-        await safe_edit_message(msg, "❌ Font not found! Place 'HelveticaRounded-Bold.ttf' in 'fonts' folder.")
+        await safe_edit_message(msg, "❌ Font not found! Please add 'HelveticaRounded-Bold.ttf' in 'fonts' folder.")
         return None
 
-    # Fix: Compute the escaped subtitle path outside the f-string
+    # Properly escape subtitle paths
     sub_path = sub.as_posix().replace(":", "\\:")
     formatted_sub = f"'{sub_path}'" if " " in sub.name else sub_path
 
-    scale_filter = f"scale={user_settings['resolution']}," if user_settings.get("resolution") != "Original" else ""
+    scale_filter = f"scale={user_settings['resolution']}," if user_settings["resolution"] != "Original" else ""
 
     command = [
         "ffmpeg", "-hide_banner", "-i", str(vid),
@@ -298,6 +294,8 @@ async def hardmux_vid(vid_filename: str, sub_filename: str, msg, user_settings: 
         "-crf", user_settings["crf"].split()[0], "-tag:v", "hvc1", "-c:a", "copy", "-y", str(out_location)
     ]
 
+    logger.info(f"🚀 Running FFmpeg command: {' '.join(command)}")
+
     process = await asyncio.create_subprocess_exec(
         *command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
     )
@@ -305,7 +303,7 @@ async def hardmux_vid(vid_filename: str, sub_filename: str, msg, user_settings: 
     await process.wait()
 
     if process.returncode == 0:
-        await safe_edit_message(msg, f"✅ Muxing Completed!\n⏳ Time: {round(time.time() - start)}s")
+        await safe_edit_message(msg, f"✅ Muxing Completed!\n⏳ Time: `{round(time.time() - start)}s`")
         return output
     else:
         trimmed_error = error_output[-3000:] if len(error_output) > 3000 else error_output
