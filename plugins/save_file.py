@@ -28,87 +28,59 @@ async def _check_user(_, __, m):
 
 check_user = filters.create(_check_user)
 
-class Chat:
-    """Static class for chat messages."""
-    DOWNLOAD_SUCCESS = "✅ Download completed in {} seconds!"
-    UNSUPPORTED_FORMAT = "❌ Unsupported format: {}. Only mp4, mkv, srt, ass are supported."
-    FILE_SIZE_ERROR = "❌ Cannot determine file size. Please try a different URL."
-    MAX_FILE_SIZE = "❌ File size exceeds 2GB limit."
-    LONG_CUS_FILENAME = "❌ Custom filename too long (max 60 characters)."
+async def safe_edit_message(message, new_text):
+    """Safe edit function to avoid duplicate messages."""
+    try:
+        if message.text != new_text:  # ✅ Check for duplicate message
+            await message.edit_text(new_text)
+    except Exception as e:
+        logger.warning(f"Edit message failed: {e}")
 
-async def save_document_or_video(client, message, is_video: bool = False):
-    """Save a document or video file from Telegram."""
+@Client.on_message(filters.document & check_user & filters.private)
+async def save_doc(client, message):
     chat_id = message.from_user.id
     start_time = time.time()
     downloading = await client.send_message(chat_id, "📥 Downloading your File...")
 
-    try:
-        media = message.document if not is_video else message.video
-        download_location = await client.download_media(
-            message=message,
-            file_name=str(Path(Config.DOWNLOAD_DIR) / ""),
-            progress=progress_bar,
-            progress_args=("Downloading", downloading, start_time),
+    download_location = await client.download_media(
+        message=message,
+        file_name=os.path.join(Config.DOWNLOAD_DIR, ""),
+        progress=progress_bar,
+        progress_args=("Initializing", downloading, start_time),
+    )
+
+    if not download_location:
+        return await safe_edit_message(downloading, "❌ Downloading Failed!")
+
+    await safe_edit_message(downloading, Chat.DOWNLOAD_SUCCESS.format(round(time.time() - start_time)))
+
+    tg_filename = os.path.basename(download_location)
+    og_filename = message.document.file_name if message.document.file_name else tg_filename
+    ext = og_filename.split(".")[-1]
+    filename = f"{round(start_time)}.{ext}"
+
+    os.rename(os.path.join(Config.DOWNLOAD_DIR, tg_filename), os.path.join(Config.DOWNLOAD_DIR, filename))
+
+    if ext in ["srt", "ass"]:
+        db.put_sub(chat_id, filename)
+        new_text = (
+            "✅ Subtitle file downloaded successfully.\n"
+            "Choose your desired muxing!\n[ /softmux , /hardmux ]"
+            if db.check_video(chat_id) else "✅ Subtitle file downloaded.\nNow send a Video File!"
         )
+    elif ext in ["mp4", "mkv"]:
+        db.put_video(chat_id, filename, og_filename)
+        new_text = (
+            "✅ Video file downloaded successfully.\n"
+            "Choose your desired muxing.\n[ /softmux , /hardmux ]"
+            if db.check_sub(chat_id) else "✅ Video file downloaded successfully.\nNow send a Subtitle file!"
+        )
+    else:
+        new_text = Chat.UNSUPPORTED_FORMAT.format(ext) + f"\nFile = {tg_filename}"
+        os.remove(os.path.join(Config.DOWNLOAD_DIR, tg_filename))
 
-        if not download_location:
-            await downloading.edit_text("❌ Downloading Failed!")
-            return
-
-        await downloading.edit_text(Chat.DOWNLOAD_SUCCESS.format(round(time.time() - start_time)))
-
-        # Get file details
-        tg_filename = Path(download_location).name
-        og_filename = media.file_name if media.file_name else tg_filename
-        ext = og_filename.split(".")[-1].lower()
-
-        # Ensure unique filename using timestamp and counter
-        timestamp = str(int(time.time()))
-        counter = 0
-        base_filename = f"{timestamp}_{counter}.{ext}"
-        file_path = Path(Config.DOWNLOAD_DIR) / base_filename
-
-        while file_path.exists():
-            counter += 1
-            base_filename = f"{timestamp}_{counter}.{ext}"
-            file_path = Path(Config.DOWNLOAD_DIR) / base_filename
-
-        # Rename the downloaded file
-        os.rename(download_location, file_path)
-
-        # Store in database
-        if ext in ["srt", "ass"]:
-            db.put_sub(chat_id, str(file_path.name))
-            new_message = (
-                "✅ Subtitle file downloaded successfully.\n"
-                "Choose your desired muxing!\n[ /softmux , /hardmux ]"
-                if db.check_video(chat_id) else
-                "✅ Subtitle file downloaded.\nNow send a Video File!"
-            )
-
-            # ✅ Prevent Duplicate Messages
-            if "Subtitle file downloaded successfully" not in downloading.text:
-                await downloading.edit_text(new_message)
-
-        elif ext in ["mp4", "mkv"]:
-            db.put_video(chat_id, str(file_path.name), og_filename)
-            new_message = (
-                "✅ Video file downloaded successfully.\n"
-                "Choose your desired muxing!\n[ /softmux , /hardmux ]"
-                if db.check_sub(chat_id) else
-                "✅ Video file downloaded successfully.\nNow send a Subtitle file!"
-            )
-            await downloading.edit_text(new_message)
-
-        else:
-            response = Chat.UNSUPPORTED_FORMAT.format(ext)
-            file_path.unlink()
-            await downloading.edit_text(response)
-            return
-
-    except Exception as e:
-        logger.error(f"Error saving {('video' if is_video else 'document')}: {e}")
-        await downloading.edit_text(f"❌ Error saving file: {str(e)}")
+    await safe_edit_message(downloading, new_text)
+    
 @Client.on_message(filters.document & check_user & filters.private)
 async def save_doc(client, message):
     """Handle document uploads (subtitles or videos)."""
