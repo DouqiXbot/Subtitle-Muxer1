@@ -187,23 +187,52 @@ async def start_encoding_process(client, query):
     chat_id = query.message.chat.id
     download_dir = Path(Config.DOWNLOAD_DIR)
 
+    logger.info(f"Starting encoding process for user {user_id}")
+
+    # Retrieve files and settings from database
     og_vid_filename = db.get_vid_filename(chat_id)
     og_sub_filename = db.get_sub_filename(chat_id)
     user_settings = db.get_encoding_settings(user_id) or {}
 
-    sent_msg = await query.message.edit_text("Preparing encoding process...")
-    hardmux_filename = await hardmux_vid(og_vid_filename, og_sub_filename, sent_msg, user_settings)
-
-    if not hardmux_filename:
+    # Validate files and settings
+    if not og_vid_filename or not (download_dir / og_vid_filename).exists():
+        await query.message.edit_text("❌ Error: Video file not found or not uploaded!")
+        logger.error(f"Video file not found for user {user_id}: {og_vid_filename}")
         return
 
-    final_filename = db.get_filename(chat_id)
-    input_path = download_dir / hardmux_filename
-    output_path = download_dir / final_filename
-    os.rename(input_path, output_path)
+    if not og_sub_filename or not (download_dir / og_sub_filename).exists():
+        await query.message.edit_text("❌ Error: Subtitle file not found or not uploaded!")
+        logger.error(f"Subtitle file not found for user {user_id}: {og_sub_filename}")
+        return
 
-    start_time = time.time()
+    # Ensure all required settings are present
+    default_settings = {
+        "crf": "20",
+        "preset": "superfast",
+        "codec": "libx265",
+        "font_size": "24",
+        "resolution": "Original"
+    }
+    user_settings = {**default_settings, **user_settings}
+
+    sent_msg = await query.message.edit_text("📀 Preparing encoding process...")
+
     try:
+        hardmux_filename = await hardmux_vid(og_vid_filename, og_sub_filename, sent_msg, user_settings)
+        if not hardmux_filename:
+            await sent_msg.edit_text("❌ Encoding failed. Check logs for details.")
+            return
+
+        final_filename = db.get_filename(chat_id)
+        if not final_filename:
+            final_filename = f"{os.path.splitext(og_vid_filename)[0]}_hardmuxed.mp4"
+            db.put_video(chat_id, og_vid_filename, final_filename)  # Ensure filename is stored
+
+        input_path = download_dir / hardmux_filename
+        output_path = download_dir / final_filename
+        os.rename(input_path, output_path)
+
+        start_time = time.time()
         await client.send_document(
             chat_id,
             document=str(output_path),
@@ -211,10 +240,11 @@ async def start_encoding_process(client, query):
             progress=progress_bar,
             progress_args=("Uploading your File!", sent_msg, start_time)
         )
-        await sent_msg.edit(f"✅ File Uploaded!\n⏳ Time: {round(time.time() - start_time)}s")
+        await sent_msg.edit_text(f"✅ File Uploaded!\n⏳ Time: {round(time.time() - start_time)}s")
+
     except Exception as e:
-        logger.error(f"Upload failed: {e}")
-        await client.send_message(chat_id, "❌ Upload failed! Check logs for details.")
+        logger.error(f"Encoding or upload failed for user {user_id}: {e}")
+        await sent_msg.edit_text(f"❌ An error occurred during encoding/upload: {str(e)}")
         return
 
     # Cleanup
@@ -222,10 +252,12 @@ async def start_encoding_process(client, query):
         if file and (download_dir / file).exists():
             try:
                 (download_dir / file).unlink()
+                logger.info(f"Cleaned up file: {file}")
             except OSError as e:
                 logger.warning(f"Failed to delete {file}: {e}")
 
     db.erase(chat_id)
+    logger.info(f"Completed encoding and cleanup for user {user_id}")
 
 async def hardmux_vid(vid_filename: str, sub_filename: str, msg, user_settings: Dict) -> Optional[str]:
     """Hardmux video with subtitles using FFmpeg."""
