@@ -79,32 +79,36 @@ async def save_document_or_video(client, message, is_video: bool = False):
         # Store in database
         if ext in ["srt", "ass"]:
             db.put_sub(chat_id, str(file_path.name))
-            response = (
+            new_message = (
                 "✅ Subtitle file downloaded successfully.\n"
                 "Choose your desired muxing!\n[ /softmux , /hardmux ]"
                 if db.check_video(chat_id) else
                 "✅ Subtitle file downloaded.\nNow send a Video File!"
             )
+
+            # ✅ Prevent Duplicate Messages
+            if "Subtitle file downloaded successfully" not in downloading.text:
+                await downloading.edit_text(new_message)
+
         elif ext in ["mp4", "mkv"]:
             db.put_video(chat_id, str(file_path.name), og_filename)
-            response = (
+            new_message = (
                 "✅ Video file downloaded successfully.\n"
                 "Choose your desired muxing!\n[ /softmux , /hardmux ]"
                 if db.check_sub(chat_id) else
                 "✅ Video file downloaded successfully.\nNow send a Subtitle file!"
             )
+            await downloading.edit_text(new_message)
+
         else:
             response = Chat.UNSUPPORTED_FORMAT.format(ext)
             file_path.unlink()
             await downloading.edit_text(response)
             return
 
-        await downloading.edit_text(response)
-
     except Exception as e:
         logger.error(f"Error saving {('video' if is_video else 'document')}: {e}")
         await downloading.edit_text(f"❌ Error saving file: {str(e)}")
-
 @Client.on_message(filters.document & check_user & filters.private)
 async def save_doc(client, message):
     """Handle document uploads (subtitles or videos)."""
