@@ -3,7 +3,7 @@ import os
 import time
 import re
 import requests
-from urllib.parse import quote, unquote
+from urllib.parse import unquote
 from pathlib import Path
 from pyrogram import Client, filters
 from config import Config
@@ -36,8 +36,8 @@ async def safe_edit_message(message, new_text):
     except Exception as e:
         logger.warning(f"Edit message failed: {e}")
 
-@Client.on_message(filters.document & check_user & filters.private)
-async def save_doc(client, message):
+async def save_document_or_video(client, message, is_video=False):
+    """Handles both document and video files."""
     chat_id = message.from_user.id
     start_time = time.time()
     downloading = await client.send_message(chat_id, "📥 Downloading your File...")
@@ -55,8 +55,10 @@ async def save_doc(client, message):
     await safe_edit_message(downloading, Chat.DOWNLOAD_SUCCESS.format(round(time.time() - start_time)))
 
     tg_filename = os.path.basename(download_location)
-    og_filename = message.document.file_name if message.document.file_name else tg_filename
-    ext = og_filename.split(".")[-1]
+    og_filename = message.video.file_name if is_video else message.document.file_name
+    og_filename = og_filename if og_filename else tg_filename
+
+    ext = og_filename.split(".")[-1].lower()
     filename = f"{round(start_time)}.{ext}"
 
     os.rename(os.path.join(Config.DOWNLOAD_DIR, tg_filename), os.path.join(Config.DOWNLOAD_DIR, filename))
@@ -80,7 +82,7 @@ async def save_doc(client, message):
         os.remove(os.path.join(Config.DOWNLOAD_DIR, tg_filename))
 
     await safe_edit_message(downloading, new_text)
-    
+
 @Client.on_message(filters.document & check_user & filters.private)
 async def save_doc(client, message):
     """Handle document uploads (subtitles or videos)."""
@@ -91,6 +93,7 @@ async def save_video(client, message):
     """Handle video uploads."""
     await save_document_or_video(client, message, is_video=True)
 
+@Client.on_message(filters.text & filters.regex(r"^https?://") & check_user)
 async def save_url(client, message):
     """Save a video file from a URL."""
     chat_id = message.from_user.id
