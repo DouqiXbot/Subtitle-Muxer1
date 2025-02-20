@@ -4,8 +4,11 @@ from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from helper_func.ffmpeg import hardmux_vid  # Import FFmpeg muxing function
 from config import Config
+from helper_func.database import Database
 
 logger = logging.getLogger(__name__)
+
+db = Database()
 
 # 🔹 Encoding Options
 ENCODING_OPTIONS = {
