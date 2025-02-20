@@ -231,7 +231,10 @@ async def hardmux_vid(vid_filename: str, sub_filename: str, msg, user_settings: 
         await safe_edit_message(msg, "❌ Font not found! Place 'HelveticaRounded-Bold.ttf' in 'fonts' folder.")
         return None
 
-    formatted_sub = f"'{sub.as_posix().replace(':', '\\:')}'" if " " in sub.name else sub.as_posix().replace(":", "\\:")
+    # Fix: Compute the escaped subtitle path outside the f-string
+    sub_path = sub.as_posix().replace(":", "\\:")
+    formatted_sub = f"'{sub_path}'" if " " in sub.name else sub_path
+
     scale_filter = f"scale={user_settings['resolution']}," if user_settings.get("resolution") != "Original" else ""
 
     command = [
