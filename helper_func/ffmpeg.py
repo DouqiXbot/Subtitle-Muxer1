@@ -26,25 +26,33 @@ async def hardmux_vid(vid_filename: str, sub_filename: str, msg, user_settings: 
 
     # ✅ Resolution Fix (Only 480p, 720p, 1080p allowed)
     resolution_map = {
-        "480p": "scale=854:480",
-        "720p": "scale=1280:720",
-        "1080p": "scale=1920:1080"
+        "854x480": "scale=854:480",
+        "1280x720": "scale=1280:720",
+        "1920x1080": "scale=1920:1080"
     }
-    resolution = user_settings.get("resolution", "720p")
-    scale_filter = f"{resolution_map.get(resolution, 'scale=1280:720')},"  # Default: 720p
+    
+    # Get resolution from user settings or default to 720p
+    resolution = user_settings.get("resolution", "1280x720")
+    scale_filter = f"{resolution_map.get(resolution, 'scale=1280:720')},"  # Default to 720p
+
+    # ✅ Set default values to prevent KeyError
+    crf = user_settings.get("crf", "22")
+    preset = user_settings.get("preset", "fast")
+    codec = user_settings.get("codec", "libx264")
+    font_size = user_settings.get("font_size", "20")
 
     command = [
         "ffmpeg", "-hide_banner", "-i", str(vid),
         "-vf", (
             f"{scale_filter}"
             f"subtitles={formatted_sub}:force_style="
-            f"'FontName=HelveticaRounded-Bold,FontSize={user_settings['font_size']},"
+            f"'FontName=HelveticaRounded-Bold,FontSize={font_size},"
             f"PrimaryColour={Config.FONT_COLOR},Outline={Config.BORDER_WIDTH}',"
             f"drawtext=text='{Config.WATERMARK}':fontfile='{font_path}':"
             "x=w-tw-10:y=10:fontsize=24:fontcolor=white:borderw=2:bordercolor=black"
         ),
-        "-c:v", user_settings["codec"], "-preset", user_settings["preset"],
-        "-crf", user_settings["crf"], "-tag:v", "hvc1", "-c:a", "copy", "-y", str(out_location)
+        "-c:v", codec, "-preset", preset,
+        "-crf", crf, "-tag:v", "hvc1", "-c:a", "copy", "-y", str(out_location)
     ]
 
     logger.info(f"🚀 Running FFmpeg command: {' '.join(command)}")
