@@ -1,148 +1,123 @@
-import os
-import logging
-import asyncio
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-from helper_func.ffmpeg import hardmux_vid  # Import FFmpeg muxing function
+from helper_func.progress_bar import progress_bar
+from helper_func.dbhelper import Database as Db
+from helper_func.mux import softmux_vid, hardmux_vid
 from config import Config
-from helper_func.dbhelper import Database
+import time
+import os
+import json
 
-logger = logging.getLogger(__name__)
+db = Db()
 
-db = Database()
+async def _check_user(filt, c, m):
+    chat_id = str(m.from_user.id)
+    return chat_id in Config.ALLOWED_USERS
 
-# 🔹 Encoding Options
-ENCODING_OPTIONS = {
-    "crf": ["18", "20", "23"],
-    "preset": ["medium", "fast", "veryfast", "ultrafast"],
-    "codec": ["libx265", "libx264"],
-    "font_size": ["18", "20", "24", "28"],
-    "resolution": ["854x480", "1280x720", "1920x1080"]  # Removed "Original"
-}
+check_user = filters.create(_check_user)
 
-# 🔹 Default Encoding Settings
-DEFAULT_SETTINGS = {
-    "crf": "22",
-    "preset": "fast",
-    "codec": "libx264",
-    "font_size": "20",
-    "resolution": "1280x720"  # Default to 720p
-}
+# Store user preferences (Temporary Storage)
+user_preferences = {}
 
-# 🔹 User settings storage
-user_settings = {}
+# --- 🔹 Dynamic Button Handlers ---
+async def get_dynamic_keyboard(chat_id):
+    """Generate InlineKeyboard with user preferences."""
+    prefs = user_preferences.get(chat_id, {
+        "codec": "libx264",
+        "crf": "22",
+        "bit_depth": "8bit",
+        "resolution": "1280x720",
+        "font_size": "20",
+        "watermark": "CHS Anime"
+    })
 
-async def get_settings_keyboard(user_id: int) -> InlineKeyboardMarkup:
-    """Generate dynamic encoding settings keyboard."""
-    # Ensure user settings exist
-    if user_id not in user_settings:
-        user_settings[user_id] = DEFAULT_SETTINGS.copy()
-    else:
-        # Merge missing keys with default values
-        for key, value in DEFAULT_SETTINGS.items():
-            user_settings[user_id].setdefault(key, value)
-
-    current_settings = user_settings[user_id]
-
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton(f"CRF: {current_settings['crf']}", callback_data="setting_crf")],
+    keyboard = [
         [
-            InlineKeyboardButton(f"Preset: {current_settings['preset']}", callback_data="setting_preset"),
-            InlineKeyboardButton(f"Codec: {current_settings['codec']}", callback_data="setting_codec")
+            InlineKeyboardButton(f"🎞 Codec: {prefs['codec']}", callback_data="set_codec"),
+            InlineKeyboardButton(f"📝 CRF: {prefs['crf']}", callback_data="set_crf")
         ],
         [
-            InlineKeyboardButton(f"Font: {current_settings['font_size']}pt", callback_data="setting_font_size"),
-            InlineKeyboardButton(f"Res: {current_settings['resolution']}", callback_data="setting_resolution")
+            InlineKeyboardButton(f"🌟 Bit Depth: {prefs['bit_depth']}", callback_data="set_bitdepth"),
+            InlineKeyboardButton(f"📺 Resolution: {prefs['resolution']}", callback_data="set_resolution")
         ],
-        [InlineKeyboardButton("🚀 Start Encoding", callback_data="burn")]
-    ])
-
-@Client.on_message(filters.command("hardmux") & filters.private)
-async def hardmux(client, message):
-    """Show encoding settings menu."""
-    user_id = message.from_user.id
-    keyboard = await get_settings_keyboard(user_id)
-    await message.reply_text("⚙️ Configure encoding parameters:", reply_markup=keyboard)
-
-@Client.on_callback_query(filters.regex(r"^setting_(.+)$"))
-async def encoding_settings_callback(client, query):
-    """Display available encoding options when user clicks a setting."""
-    setting_type = query.matches[0].group(1)
-    user_id = query.from_user.id
-
-    # Ensure user settings exist
-    if user_id not in user_settings:
-        user_settings[user_id] = DEFAULT_SETTINGS.copy()
-
-    current_settings = user_settings[user_id]
-
-    buttons = [
-        InlineKeyboardButton(
-            f"{'✅ ' if option == current_settings.get(setting_type, '') else ''}{option}",
-            callback_data=f"set_{setting_type}_{option}"
-        ) for option in ENCODING_OPTIONS.get(setting_type, [])
+        [
+            InlineKeyboardButton(f"🔤 Font Size: {prefs['font_size']}", callback_data="set_fontsize"),
+            InlineKeyboardButton(f"💧 Watermark: {prefs['watermark']}", callback_data="set_watermark")
+        ],
+        [InlineKeyboardButton("✅ Start Hardmux", callback_data="start_hardmux")]
     ]
-    buttons.append(InlineKeyboardButton("🔙 Back", callback_data="settings_back"))
+    
+    return InlineKeyboardMarkup(keyboard)
 
-    await query.edit_message_text(
-        f"Select {setting_type.replace('_', ' ').title()}:",
-        reply_markup=InlineKeyboardMarkup([buttons[i:i+2] for i in range(0, len(buttons), 2)])
-    )
+@Client.on_message(filters.command('set_preferences') & check_user & filters.private)
+async def set_preferences(client, message):
+    """Send dynamic buttons for users to select preferences."""
+    chat_id = message.from_user.id
+    user_preferences[chat_id] = user_preferences.get(chat_id, {})  # Ensure default values exist
+    await message.reply_text("🔧 **Select Encoding Preferences:**", reply_markup=await get_dynamic_keyboard(chat_id))
 
-@Client.on_callback_query(filters.regex(r"^set_(.+)_(.+)$"))
-async def set_encoding_parameter(client, query):
-    """Save selected encoding setting and return to menu."""
-    setting_type, value = query.matches[0].groups()
-    user_id = query.from_user.id
+@Client.on_callback_query(filters.regex(r"set_(.+)"))
+async def update_preferences(client, callback: CallbackQuery):
+    """Handle preference updates from dynamic buttons."""
+    chat_id = callback.from_user.id
+    option = callback.data.split("_")[1]
 
-    # Ensure user_settings[user_id] exists
-    if user_id not in user_settings:
-        user_settings[user_id] = DEFAULT_SETTINGS.copy()
+    options_map = {
+        "codec": ["libx264", "libx265"],
+        "crf": ["18", "22", "28"],
+        "bitdepth": ["8bit", "10bit"],
+        "resolution": ["854x480", "1280x720", "1920x1080"],
+        "fontsize": ["16", "20", "24"],
+        "watermark": ["CHS Anime", "Custom Text", "None"]
+    }
 
-    user_settings[user_id][setting_type] = value
+    current_value = user_preferences[chat_id].get(option, options_map[option][0])
+    new_index = (options_map[option].index(current_value) + 1) % len(options_map[option])
+    user_preferences[chat_id][option] = options_map[option][new_index]
 
-    await query.answer(f"{setting_type.replace('_', ' ').title()} set to {value}!")
-    keyboard = await get_settings_keyboard(user_id)
-    await query.message.edit_text("⚙️ Configure encoding parameters:", reply_markup=keyboard)
+    await callback.message.edit_text("🔧 **Updated Preferences:**", reply_markup=await get_dynamic_keyboard(chat_id))
+    await callback.answer("Updated!")
 
-@Client.on_callback_query(filters.regex("burn"))
-async def start_encoding_process(client, query):
-    """Start the encoding process when the user presses 'Start Encoding'."""
-    chat_id = query.from_user.id
-
-    # 🔹 Fetch stored filenames
+# --- 🔹 Hardmux Function ---
+@Client.on_message(filters.command('hardmux') & check_user & filters.private)
+async def hardmux(client, message):
+    chat_id = message.from_user.id
     og_vid_filename = db.get_vid_filename(chat_id)
     og_sub_filename = db.get_sub_filename(chat_id)
 
-    # 🔹 Validation Checks
+    # Validation Checks
     text = ''
     if not og_vid_filename or not os.path.exists(os.path.join(Config.DOWNLOAD_DIR, og_vid_filename)):
-        text += "First send a Video File\n"
+        text += 'First send a Video File\n'
     if not og_sub_filename or not os.path.exists(os.path.join(Config.DOWNLOAD_DIR, og_sub_filename)):
-        text += "Send a Subtitle File!"
-
+        text += 'Send a Subtitle File!'
+    
     if text:
         await client.send_message(chat_id, text)
         return
 
-    # 🔹 Initial message update
-    sent_msg = await query.message.edit_text("⚙️ Preparing encoding process...")
+    # Show Dynamic Buttons Before Processing
+    await message.reply_text("🔧 **Select Encoding Preferences Before Hardmuxing:**", reply_markup=await get_dynamic_keyboard(chat_id))
 
-    # 🔹 Wait for 10-15 seconds before starting encoding
-    await asyncio.sleep(15)
+@Client.on_callback_query(filters.regex("start_hardmux"))
+async def start_hardmux(client, callback: CallbackQuery):
+    chat_id = callback.from_user.id
+    og_vid_filename = db.get_vid_filename(chat_id)
+    og_sub_filename = db.get_sub_filename(chat_id)
 
-    # 🔹 Start Hardmuxing
-    hardmux_filename = await hardmux_vid(og_vid_filename, og_sub_filename, sent_msg, user_settings.get(chat_id, DEFAULT_SETTINGS))
-
-    if not hardmux_filename:
-        await sent_msg.edit_text("❌ Encoding Failed!")
+    if not og_vid_filename or not og_sub_filename:
+        await callback.answer("⚠️ Missing files. Please upload them first!", show_alert=True)
         return
 
-    # 🔹 Rename the output file
+    sent_msg = await client.send_message(chat_id, "⏳ Your File is Being Hard Subbed. This might take a long time!")
+
+    hardmux_filename = await hardmux_vid(og_vid_filename, og_sub_filename, sent_msg, user_preferences.get(chat_id, {}))
+    if not hardmux_filename:
+        return
+    
     final_filename = db.get_filename(chat_id)
     os.rename(os.path.join(Config.DOWNLOAD_DIR, hardmux_filename), os.path.join(Config.DOWNLOAD_DIR, final_filename))
 
-    # 🔹 Upload the final file
     start_time = time.time()
     try:
         await client.send_document(
@@ -152,15 +127,19 @@ async def start_encoding_process(client, query):
             document=os.path.join(Config.DOWNLOAD_DIR, final_filename),
             caption=final_filename
         )
-        await sent_msg.edit_text(f"✅ File Successfully Uploaded!\n⏳ Total Time: {round(time.time() - start_time)} seconds")
+        await sent_msg.edit(f'✅ File Successfully Uploaded!\n⏳ Time Taken: {round(time.time() - start_time)}s')
     except Exception as e:
         print(e)
-        await client.send_message(chat_id, "❌ An error occurred while uploading the file!\nCheck logs for details.")
+        await client.send_message(chat_id, '❌ An error occurred while uploading the file!')
 
-    # 🔹 Cleanup downloaded files
+    # Safe Cleanup
     path = Config.DOWNLOAD_DIR + '/'
-    for file in [og_sub_filename, og_vid_filename, final_filename]:
-        if file and os.path.exists(path + file):
-            os.remove(path + file)
+    if og_sub_filename and os.path.exists(path + og_sub_filename):
+        os.remove(path + og_sub_filename)
+    if og_vid_filename and os.path.exists(path + og_vid_filename):
+        os.remove(path + og_vid_filename)
+    if final_filename and os.path.exists(path + final_filename):
+        os.remove(path + final_filename)
 
     db.erase(chat_id)
+    await callback.answer("✅ Hardmuxing Started!")
