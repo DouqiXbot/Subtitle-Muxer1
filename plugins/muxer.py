@@ -22,14 +22,17 @@ user_preferences = {}
 # --- 🔹 Dynamic Button Handlers ---
 async def get_dynamic_keyboard(chat_id):
     """Generate InlineKeyboard with user preferences."""
-    prefs = user_preferences.get(chat_id, {
-        "codec": "libx264",
-        "crf": "22",
-        "bit_depth": "8bit",
-        "resolution": "1280x720",
-        "font_size": "20",
-        "watermark": "CHS Anime"
-    })
+    if chat_id not in user_preferences:
+        user_preferences[chat_id] = {
+            "codec": "libx264",
+            "crf": "22",
+            "bit_depth": "8bit",
+            "resolution": "1280x720",
+            "font_size": "20",
+            "watermark": "CHS Anime"
+        }
+
+    prefs = user_preferences[chat_id]
 
     keyboard = [
         [
@@ -46,16 +49,27 @@ async def get_dynamic_keyboard(chat_id):
         ],
         [InlineKeyboardButton("✅ Start Hardmux", callback_data="start_hardmux")]
     ]
-    
+
     return InlineKeyboardMarkup(keyboard)
 
 @Client.on_message(filters.command('set_preferences') & check_user & filters.private)
 async def set_preferences(client, message):
     """Send dynamic buttons for users to select preferences."""
     chat_id = message.from_user.id
-    user_preferences[chat_id] = user_preferences.get(chat_id, {})  # Ensure default values exist
-    await message.reply_text("🔧 **Select Encoding Preferences:**", reply_markup=await get_dynamic_keyboard(chat_id))
+    
+    # ✅ Initialize defaults if not present
+    if chat_id not in user_preferences:
+        user_preferences[chat_id] = {
+            "codec": "libx264",
+            "crf": "22",
+            "bit_depth": "8bit",
+            "resolution": "1280x720",
+            "font_size": "20",
+            "watermark": "CHS Anime"
+        }
 
+    await message.reply_text("🔧 **Select Encoding Preferences:**", reply_markup=await get_dynamic_keyboard(chat_id))
+    
 @Client.on_callback_query(filters.regex(r"set_(.+)"))
 async def update_preferences(client, callback: CallbackQuery):
     """Handle preference updates from dynamic buttons."""
