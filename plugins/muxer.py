@@ -2,7 +2,7 @@ from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from helper_func.progress_bar import progress_bar
 from helper_func.dbhelper import Database as Db
-from helper_func.mux import softmux_vid, hardmux_vid
+from helper_func.ffmpeg import hardmux_vid
 from config import Config
 import time
 import os
